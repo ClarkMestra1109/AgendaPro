@@ -1,590 +1,390 @@
-import React, { useState } from 'react';
-import { 
-  PROVIDER_LAURA, 
-  CLIENT_CARLOS, 
-  INITIAL_SERVICES, 
-  INITIAL_BOOKINGS, 
-  INITIAL_SLOTS, 
-  INITIAL_ACTIVITIES 
-} from './data/mockData';
-import { 
-  UserProfile, 
-  UserRole, 
-  ServiceItem, 
-  Booking, 
-  TimeSlot, 
-  ActivityItem 
+import React, { useState, useEffect } from 'react';
+import {
+  UserRole,
+  CurrentView,
+  Booking,
+  ServiceItem,
+  AvailabilitySlot,
+  CalendarEvent,
 } from './types';
-import { Sidebar, ActiveNavKey } from './components/common/Sidebar';
-import { Navbar } from './components/common/Navbar';
-import { LoginView } from './components/auth/LoginView';
-import { RegisterView } from './components/auth/RegisterView';
-import { ClientHomeView } from './components/client/ClientHomeView';
-import { ClientExploreServicesView } from './components/client/ClientExploreServicesView';
-import { ClientBookingView } from './components/client/ClientBookingView';
-import { ClientBookingsView } from './components/client/ClientBookingsView';
-import { ProviderDashboardView } from './components/provider/ProviderDashboardView';
-import { ProviderServicesView } from './components/provider/ProviderServicesView';
-import { ProviderAvailabilityView } from './components/provider/ProviderAvailabilityView';
-import { ProviderBookingsView } from './components/provider/ProviderBookingsView';
-import { ProviderCalendarView } from './components/provider/ProviderCalendarView';
-import { ProfileView } from './components/common/ProfileView';
-import { BookingDetailModal } from './components/common/BookingDetailModal';
-import { Sparkles, Eye, ShieldCheck, ArrowRight, Check } from 'lucide-react';
+import {
+  INITIAL_SERVICES,
+  INITIAL_BOOKINGS,
+  INITIAL_SLOTS,
+  INITIAL_CALENDAR_EVENTS,
+} from './data/mockData';
+import { Sidebar } from './components/Sidebar';
+import { Header } from './components/Header';
+import { LoginScreen } from './components/screens/LoginScreen';
+import { ProviderDashboard } from './components/screens/ProviderDashboard';
+import { ProviderReservations } from './components/screens/ProviderReservations';
+import { ProviderAgenda } from './components/screens/ProviderAgenda';
+import { ProviderServices } from './components/screens/ProviderServices';
+import { ProviderAvailability } from './components/screens/ProviderAvailability';
+import { ClientDashboard } from './components/screens/ClientDashboard';
+import { ClientExplore } from './components/screens/ClientExplore';
+import { ClientBooking } from './components/screens/ClientBooking';
+import { ClientReservations } from './components/screens/ClientReservations';
+import { BookingConfirmationModal } from './components/modals/BookingConfirmationModal';
+import { CancelBookingModal } from './components/modals/CancelBookingModal';
+import { NewServiceModal } from './components/modals/NewServiceModal';
+import { NewSlotModal } from './components/modals/NewSlotModal';
+import { SharePublicLinkModal } from './components/modals/SharePublicLinkModal';
+import { CheckCircle2 } from 'lucide-react';
 
-export default function App() {
-  // Authentication & Current User
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
-  const [currentUser, setCurrentUser] = useState<UserProfile>(PROVIDER_LAURA);
-  
-  // Navigation
-  const [activeNav, setActiveNav] = useState<ActiveNavKey>('provider-dashboard');
-  const [authScreen, setAuthScreen] = useState<'login' | 'register'>('login');
+export function App() {
+  // Configuración de Rol
+  const [role, setRole] = useState<UserRole>(() => {
+    const saved = localStorage.getItem('agendapro_role');
+    return (saved as UserRole) || 'provider';
+  });
 
-  // Application Data State
-  const [services, setServices] = useState<ServiceItem[]>(INITIAL_SERVICES);
-  const [bookings, setBookings] = useState<Booking[]>(INITIAL_BOOKINGS);
-  const [slots, setSlots] = useState<TimeSlot[]>(INITIAL_SLOTS);
-  const [activities, setActivities] = useState<ActivityItem[]>(INITIAL_ACTIVITIES);
+  // Vista inicial obligatoria en Login al entrar a la página
+  const [currentView, setCurrentView] = useState<CurrentView>('login');
 
-  // Active Flow Items
-  const [selectedServiceToBook, setSelectedServiceToBook] = useState<ServiceItem>(INITIAL_SERVICES[0]);
-  const [selectedBookingForModal, setSelectedBookingForModal] = useState<Booking | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [bookings, setBookings] = useState<Booking[]>(() => {
+    const saved = localStorage.getItem('agendapro_bookings');
+    return saved ? JSON.parse(saved) : INITIAL_BOOKINGS;
+  });
+
+  const [services, setServices] = useState<ServiceItem[]>(() => {
+    const saved = localStorage.getItem('agendapro_services');
+    return saved ? JSON.parse(saved) : INITIAL_SERVICES;
+  });
+
+  const [slots, setSlots] = useState<AvailabilitySlot[]>(() => {
+    const saved = localStorage.getItem('agendapro_slots');
+    return saved ? JSON.parse(saved) : INITIAL_SLOTS;
+  });
+
+  const [calendarEvents] = useState<CalendarEvent[]>(() => {
+    const saved = localStorage.getItem('agendapro_events');
+    return saved ? JSON.parse(saved) : INITIAL_CALENDAR_EVENTS;
+  });
+
+  const [selectedServiceToBook, setSelectedServiceToBook] = useState<ServiceItem>(
+    services[0] || INITIAL_SERVICES[0]
+  );
+
+  // Estados de Modales
+const [confirmedBookingForModal, setConfirmedBookingForModal] = useState<Booking | null>(null);
+const [bookingToCancel, setBookingToCancel] = useState<Booking | null>(null);
+
+const [isNewServiceOpen, setIsNewServiceOpen] = useState(false);
+const [editingService, setEditingService] = useState<ServiceItem | null>(null);
+
+const [isNewSlotOpen, setIsNewSlotOpen] = useState(false);
+const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Notificaciones Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Switch role helper
-  const handleSwitchRole = (role: UserRole) => {
+  // Sincronización con LocalStorage
+  useEffect(() => {
+    localStorage.setItem('agendapro_role', role);
+  }, [role]);
+
+  useEffect(() => {
+    localStorage.setItem('agendapro_bookings', JSON.stringify(bookings));
+  }, [bookings]);
+
+  useEffect(() => {
+    localStorage.setItem('agendapro_services', JSON.stringify(services));
+  }, [services]);
+
+  useEffect(() => {
+    localStorage.setItem('agendapro_slots', JSON.stringify(slots));
+  }, [slots]);
+
+  // Cambios de rol y login
+  const handleSwitchRole = () => {
     if (role === 'provider') {
-      setCurrentUser(PROVIDER_LAURA);
-      setActiveNav('provider-dashboard');
-      setIsLoggedIn(true);
-      showToast('Cambiado a modo Proveedor (Laura Morales)');
+      setRole('client');
+      setCurrentView('client-dashboard');
+      showToast('Cambiado a Modo Cliente VIP (Carlos Mendoza)');
     } else {
-      setCurrentUser(CLIENT_CARLOS);
-      setActiveNav('client-home');
-      setIsLoggedIn(true);
-      showToast('Cambiado a modo Cliente (Carlos Mendoza)');
+      setRole('provider');
+      setCurrentView('provider-dashboard');
+      showToast('Cambiado a Modo Proveedor (Laura Morales)');
     }
   };
 
-  const handleLogin = (role: UserRole, email: string) => {
-    setIsLoggedIn(true);
-    if (role === 'provider') {
-      setCurrentUser({ ...PROVIDER_LAURA, email });
-      setActiveNav('provider-dashboard');
-      showToast('Bienvenida Laura Morales a tu Workspace');
+  const handleLogin = (selectedRole: UserRole) => {
+    setRole(selectedRole);
+    if (selectedRole === 'provider') {
+      setCurrentView('provider-dashboard');
+      showToast('¡Bienvenida, Laura Morales!');
     } else {
-      setCurrentUser({ ...CLIENT_CARLOS, email });
-      setActiveNav('client-home');
-      showToast('Bienvenido Carlos Mendoza');
-    }
-  };
-
-  const handleRegisterSuccess = (role: UserRole, name: string, email: string) => {
-    setIsLoggedIn(true);
-    if (role === 'provider') {
-      setCurrentUser({
-        ...PROVIDER_LAURA,
-        name,
-        email,
-        businessName: `${name} Studio`
-      });
-      setActiveNav('provider-dashboard');
-      showToast(`Cuenta de Proveedor creada para ${name}`);
-    } else {
-      setCurrentUser({
-        ...CLIENT_CARLOS,
-        name,
-        email
-      });
-      setActiveNav('client-home');
-      showToast(`Cuenta de Cliente creada para ${name}`);
+      setCurrentView('client-dashboard');
+      showToast('¡Bienvenido, Carlos Mendoza!');
     }
   };
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
-    setAuthScreen('login');
+    setCurrentView('login');
     showToast('Sesión cerrada con éxito');
   };
 
-  // Actions
-  const handleAddService = (newSvcData: Partial<ServiceItem>) => {
-    const newService: ServiceItem = {
-      id: `srv-${Date.now()}`,
-      title: newSvcData.title || 'Nuevo Servicio',
-      subtitle: 'Laura Morales Studio',
-      description: newSvcData.description || 'Descripción del servicio.',
-      category: newSvcData.category || 'Barbería & Belleza',
-      categoryBadge: (newSvcData.category || 'BARBERÍA').toUpperCase(),
-      durationMinutes: newSvcData.durationMinutes || 45,
-      modality: newSvcData.modality || 'Presencial',
-      priceCOP: newSvcData.priceCOP || 30000,
-      status: 'active',
-      rating: 5.0,
-      reviewsCount: 1,
-      providerId: currentUser.id,
-      providerName: currentUser.name,
-      providerAvatar: currentUser.avatar,
-      providerRoleTitle: 'Especialista Certificado',
-      location: 'Sede Principal, Bogotá',
-      image: '/src/assets/images/barber_shop_chair_1791857352646.jpg'
-    };
-    setServices([newService, ...services]);
-    showToast(`Servicio "${newService.title}" creado con éxito en catálogo.`);
-  };
-
-  const handleToggleServiceStatus = (serviceId: string) => {
-    setServices(prev => prev.map(s => {
-      if (s.id === serviceId) {
-        const nextStatus = s.status === 'active' ? 'inactive' : 'active';
-        showToast(`Servicio ${s.title} marcado como ${nextStatus === 'active' ? 'Activo' : 'Inactivo'}`);
-        return { ...s, status: nextStatus };
-      }
-      return s;
-    }));
-  };
-
-  const handleAddSlot = (newSlotData: Partial<TimeSlot>) => {
-    const newSlot: TimeSlot = {
-      id: `slot-${Date.now()}`,
-      dateStr: newSlotData.dateStr || '2024-10-28',
-      dayLabel: newSlotData.dayLabel || 'Lunes, 28 Octubre',
-      time: newSlotData.time || '08:00 AM',
-      endTime: newSlotData.endTime || '09:00 AM',
-      serviceId: newSlotData.serviceId || 'srv-1',
-      serviceName: newSlotData.serviceName || 'Servicio Publicado',
-      status: 'available',
-      priceCOP: newSlotData.priceCOP || 25000,
-      modality: newSlotData.modality || 'Presencial'
-    };
-    setSlots([newSlot, ...slots]);
-    showToast('Horario publicado exitosamente en agenda pública');
-  };
-
-  const handleToggleSlotStatus = (slotId: string) => {
-    setSlots(prev => prev.map(s => {
-      if (s.id === slotId) {
-        const nextStatus = s.status === 'available' ? 'withdrawn' : 'available';
-        showToast(nextStatus === 'available' ? 'Horario reactivado' : 'Horario retirado de la agenda');
-        return { ...s, status: nextStatus };
-      }
-      return s;
-    }));
-  };
-
+  // Acciones de reservas
   const handleConfirmBooking = (bookingId: string) => {
-    setBookings(prev => prev.map(b => {
-      if (b.id === bookingId) {
-        showToast(`Cita ${b.code} confirmada. Notificación enviada al cliente.`);
-        return { ...b, status: 'confirmed' };
-      }
-      return b;
-    }));
-  };
-
-  const handleCancelBooking = (bookingId: string) => {
-    setBookings(prev => prev.map(b => {
-      if (b.id === bookingId) {
-        showToast(`Cita ${b.code} cancelada exitosamente.`);
-        return { ...b, status: 'cancelled', cancelReason: 'Cancelada por el usuario' };
-      }
-      return b;
-    }));
-  };
-
-  const handleBookingConfirmedByClient = (newBookingData: Partial<Booking>) => {
-    const newBooking: Booking = {
-      id: `bk-${Date.now()}`,
-      code: newBookingData.code || `#RS-${Math.floor(1000 + Math.random() * 9000)}`,
-      clientName: currentUser.name,
-      clientEmail: currentUser.email,
-      clientPhone: currentUser.phone || '+57 300 892 4110',
-      clientId: currentUser.id,
-      serviceId: newBookingData.serviceId || 'srv-1',
-      serviceTitle: newBookingData.serviceTitle || 'Servicio',
-      providerName: newBookingData.providerName || 'Laura Morales Studio',
-      providerAvatar: newBookingData.providerAvatar || '/src/assets/images/laura_morales_avatar_1791857350988.jpg',
-      dateStr: newBookingData.dateStr || '2024-10-27',
-      dateDisplay: newBookingData.dateDisplay || 'Jueves, 27 de Octubre de 2024',
-      timeDisplay: newBookingData.timeDisplay || '11:00 AM',
-      timeRange: newBookingData.timeRange || '11:00 AM - 11:45 AM',
-      durationMinutes: newBookingData.durationMinutes || 45,
-      priceCOP: newBookingData.priceCOP || 25000,
-      modality: newBookingData.modality || 'Presencial',
-      status: 'confirmed',
-      address: newBookingData.address,
-      notes: newBookingData.notes,
-      periodOfDay: 'Mañana'
-    };
-
-    setBookings([newBooking, ...bookings]);
-
-    const newActivity: ActivityItem = {
-      id: `act-${Date.now()}`,
-      title: 'Cita Agendada y Confirmada',
-      description: `Reservaste ${newBooking.serviceTitle} para el ${newBooking.dateDisplay}.`,
-      timestamp: 'Ahora',
-      type: 'confirmed'
-    };
-    setActivities([newActivity, ...activities]);
-    showToast(`¡Reserva ${newBooking.code} confirmada con éxito!`);
-  };
-
-  // If user is on Auth screens
-  if (!isLoggedIn) {
-    if (authScreen === 'register') {
-      return (
-        <RegisterView
-          onRegisterSuccess={handleRegisterSuccess}
-          onNavigateLogin={() => setAuthScreen('login')}
-        />
-      );
-    }
-    return (
-      <LoginView
-        onLogin={handleLogin}
-        onNavigateRegister={() => setAuthScreen('register')}
-      />
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, status: 'confirmed' } : b))
     );
-  }
+    showToast('¡Reserva confirmada con éxito! Se notificó al cliente.');
+  };
 
-  // Render Logged-In Workspace
+  const handleCancelBooking = (booking: Booking) => {
+    setBookingToCancel(booking);
+  };
+
+  const handleConfirmCancelModal = (bookingId: string, reason: string) => {
+    setBookings((prev) =>
+      prev.map((b) =>
+        b.id === bookingId ? { ...b, status: 'cancelled', notes: reason } : b
+      )
+    );
+    setBookingToCancel(null);
+    showToast('Reserva cancelada y cupo liberado en el sistema.');
+  };
+
+  const handleNewBookingCreated = (newBooking: Booking) => {
+    setBookings((prev) => [newBooking, ...prev]);
+    setConfirmedBookingForModal(newBooking);
+    showToast('¡Cita agendada con éxito!');
+  };
+
+  const handleAddService = (newService: ServiceItem) => {
+    setServices((prev) => [newService, ...prev]);
+    showToast(`Servicio "${newService.title}" publicado en tu catálogo.`);
+  };
+
+  const handleUpdateService = (updatedService: ServiceItem) => {
+  setServices((prev) =>
+    prev.map((service) =>
+      service.id === updatedService.id ? updatedService : service
+    )
+  );
+
+  setEditingService(null);
+
+  showToast(`Servicio "${updatedService.title}" actualizado correctamente.`);
+};
+
+  const handleAddSlot = (newSlot: AvailabilitySlot) => {
+    setSlots((prev) => [newSlot, ...prev]);
+    showToast('Nueva franja horaria publicada con éxito.');
+  };
+
+  const handleDeleteSlot = (slotId: string) => {
+    setSlots((prev) => prev.filter((s) => s.id !== slotId));
+    showToast('Franja horaria eliminada.');
+  };
+
+  const handleToggleServiceActive = (serviceId: string) => {
+    setServices((prev) =>
+      prev.map((s) => (s.id === serviceId ? { ...s, isActive: !s.isActive } : s))
+    );
+    showToast('Estado del servicio actualizado.');
+  };
+
+  // Contadores
+  const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
+  const activeClientBookingsCount = bookings.filter(
+    (b) => b.status === 'confirmed' || b.status === 'pending'
+  ).length;
+
   return (
-    <div className="min-h-screen bg-[#F8F9FF] flex flex-col font-sans">
-      
-      {/* Top Demo Screen Quick Navigator Bar */}
-      <div className="bg-[#0B1C30] text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-3 z-40 border-b border-slate-800">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="font-bold text-slate-200">AgendaPro Interactive Demo:</span>
-          <span className="text-slate-400 hidden sm:inline">Explora las 14 pantallas del sistema:</span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Provider screens */}
-          <div className="flex items-center bg-slate-800/80 rounded-lg p-0.5 border border-slate-700">
-            <span className="text-[10px] font-bold text-blue-300 px-2 uppercase">PROVEEDOR:</span>
-            <button
-              onClick={() => {
-                setCurrentUser(PROVIDER_LAURA);
-                setActiveNav('provider-dashboard');
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'provider' && activeNav === 'provider-dashboard'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Dashboard
-            </button>
-            <button
-              onClick={() => {
-                setCurrentUser(PROVIDER_LAURA);
-                setActiveNav('provider-services');
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'provider' && activeNav === 'provider-services'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Mis Servicios
-            </button>
-            <button
-              onClick={() => {
-                setCurrentUser(PROVIDER_LAURA);
-                setActiveNav('provider-availability');
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'provider' && activeNav === 'provider-availability'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Disponibilidad
-            </button>
-            <button
-              onClick={() => {
-                setCurrentUser(PROVIDER_LAURA);
-                setActiveNav('provider-bookings');
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'provider' && activeNav === 'provider-bookings'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Reservas
-            </button>
-            <button
-              onClick={() => {
-                setCurrentUser(PROVIDER_LAURA);
-                setActiveNav('provider-calendar');
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'provider' && activeNav === 'provider-calendar'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Mi Agenda
-            </button>
-          </div>
-
-          {/* Client screens */}
-          <div className="flex items-center bg-slate-800/80 rounded-lg p-0.5 border border-slate-700">
-            <span className="text-[10px] font-bold text-emerald-300 px-2 uppercase">CLIENTE:</span>
-            <button
-              onClick={() => {
-                setCurrentUser(CLIENT_CARLOS);
-                setActiveNav('client-home');
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'client' && activeNav === 'client-home'
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Inicio
-            </button>
-            <button
-              onClick={() => {
-                setCurrentUser(CLIENT_CARLOS);
-                setActiveNav('client-services');
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'client' && activeNav === 'client-services'
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Explorar
-            </button>
-            <button
-              onClick={() => {
-                setCurrentUser(CLIENT_CARLOS);
-                setSelectedServiceToBook(services[0]);
-                setActiveNav('client-booking' as any);
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'client' && (activeNav as any) === 'client-booking'
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Agendar Cita
-            </button>
-            <button
-              onClick={() => {
-                setCurrentUser(CLIENT_CARLOS);
-                setActiveNav('client-bookings');
-              }}
-              className={`px-2 py-1 rounded text-[11px] font-semibold transition-all ${
-                currentUser.role === 'client' && activeNav === 'client-bookings'
-                  ? 'bg-emerald-600 text-white'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              Mis Reservas
-            </button>
-          </div>
-
-          {/* Auth screens */}
-          <button
-            onClick={() => {
-              setIsLoggedIn(false);
-              setAuthScreen('login');
-            }}
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-[11px] font-semibold transition-colors border border-slate-700"
-          >
-            Pantalla Login
-          </button>
-          <button
-            onClick={() => {
-              setIsLoggedIn(false);
-              setAuthScreen('register');
-            }}
-            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-[11px] font-semibold transition-colors border border-slate-700"
-          >
-            Pantalla Registro
-          </button>
-        </div>
-      </div>
-
-      {/* Main Workspace Frame */}
-      <div className="flex flex-1">
-        
-        {/* Persistent Left Sidebar */}
-        <Sidebar
-          currentUser={currentUser}
-          activeNav={activeNav}
-          onNavigate={(key) => setActiveNav(key)}
-          onLogout={handleLogout}
-        />
-
-        {/* Right Content Viewport */}
-        <div className="flex-1 flex flex-col min-w-0">
-          
-          <Navbar
-            currentUser={currentUser}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            onQuickAction={(action) => {
-              if (action === 'service') setActiveNav('provider-services');
-              if (action === 'slot') setActiveNav('provider-availability');
-              if (action === 'agenda') setActiveNav('provider-calendar');
-            }}
-            onSwitchRole={handleSwitchRole}
-          />
-
-          <main className="flex-1 pb-16">
-            
-            {/* PROVIDER SCREENS */}
-            {currentUser.role === 'provider' && (
-              <>
-                {activeNav === 'provider-dashboard' && (
-                  <ProviderDashboardView
-                    bookings={bookings}
-                    services={services}
-                    slots={slots}
-                    onNavigateServices={() => setActiveNav('provider-services')}
-                    onNavigateAvailability={() => setActiveNav('provider-availability')}
-                    onNavigateBookings={() => setActiveNav('provider-bookings')}
-                    onNavigateCalendar={() => setActiveNav('provider-calendar')}
-                    onPreviewClientView={() => handleSwitchRole('client')}
-                    onConfirmBooking={handleConfirmBooking}
-                  />
-                )}
-
-                {activeNav === 'provider-services' && (
-                  <ProviderServicesView
-                    services={services}
-                    onAddService={handleAddService}
-                    onToggleStatus={handleToggleServiceStatus}
-                  />
-                )}
-
-                {activeNav === 'provider-availability' && (
-                  <ProviderAvailabilityView
-                    slots={slots}
-                    services={services}
-                    onAddSlot={handleAddSlot}
-                    onToggleSlotStatus={handleToggleSlotStatus}
-                  />
-                )}
-
-                {activeNav === 'provider-bookings' && (
-                  <ProviderBookingsView
-                    bookings={bookings}
-                    onConfirmBooking={handleConfirmBooking}
-                    onCancelBooking={handleCancelBooking}
-                    onViewBookingDetails={(b) => setSelectedBookingForModal(b)}
-                  />
-                )}
-
-                {activeNav === 'provider-calendar' && (
-                  <ProviderCalendarView
-                    bookings={bookings}
-                    services={services}
-                    onConfirmBooking={handleConfirmBooking}
-                    onCancelBooking={handleCancelBooking}
-                  />
-                )}
-              </>
-            )}
-
-            {/* CLIENT SCREENS */}
-            {currentUser.role === 'client' && (
-              <>
-                {activeNav === 'client-home' && (
-                  <ClientHomeView
-                    services={services}
-                    bookings={bookings}
-                    activities={activities}
-                    onNavigateExplore={() => setActiveNav('client-services')}
-                    onNavigateMyBookings={() => setActiveNav('client-bookings')}
-                    onSelectServiceToBook={(svc) => {
-                      setSelectedServiceToBook(svc);
-                      setActiveNav('client-booking' as any);
-                    }}
-                    onCancelBooking={handleCancelBooking}
-                    onViewBookingDetails={(b) => setSelectedBookingForModal(b)}
-                  />
-                )}
-
-                {activeNav === 'client-services' && (
-                  <ClientExploreServicesView
-                    services={services}
-                    onSelectService={(svc) => {
-                      setSelectedServiceToBook(svc);
-                      setActiveNav('client-booking' as any);
-                    }}
-                  />
-                )}
-
-                {(activeNav as any) === 'client-booking' && (
-                  <ClientBookingView
-                    service={selectedServiceToBook}
-                    onBack={() => setActiveNav('client-services')}
-                    onBookingConfirmed={handleBookingConfirmedByClient}
-                    onNavigateMyBookings={() => setActiveNav('client-bookings')}
-                  />
-                )}
-
-                {activeNav === 'client-bookings' && (
-                  <ClientBookingsView
-                    bookings={bookings}
-                    onCancelBooking={handleCancelBooking}
-                    onViewBookingDetails={(b) => setSelectedBookingForModal(b)}
-                    onRebook={(b) => {
-                      const svc = services.find(s => s.id === b.serviceId) || services[0];
-                      setSelectedServiceToBook(svc);
-                      setActiveNav('client-booking' as any);
-                    }}
-                  />
-                )}
-              </>
-            )}
-
-            {/* COMMON: PROFILE VIEW */}
-            {activeNav === 'profile' && (
-              <ProfileView
-                currentUser={currentUser}
-                onUpdateProfile={(updated) => {
-                  setCurrentUser(prev => ({ ...prev, ...updated }));
-                  showToast('Perfil actualizado');
-                }}
-                onSwitchRole={handleSwitchRole}
-              />
-            )}
-
-          </main>
-        </div>
-      </div>
-
-      {/* Booking Detail Modal */}
-      <BookingDetailModal
-        booking={selectedBookingForModal}
-        onClose={() => setSelectedBookingForModal(null)}
-        onConfirm={handleConfirmBooking}
-        onCancel={handleCancelBooking}
-      />
-
-      {/* Floating Toast Notification */}
+    <div className="min-h-screen bg-[#f8faff] text-[#0b1c30] flex flex-col selection:bg-blue-100 selection:text-blue-900 font-sans">
+      {/* Notificación flotante (Toast) */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 bg-[#0B1C30] text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 z-50 text-xs border border-slate-700 animate-fade-in">
-          <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
+        <div className="fixed bottom-5 right-5 z-50 bg-[#0b1c30] text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700 animate-in slide-in-from-bottom-3 text-xs font-semibold">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
+      {/* Enrutador de pantallas */}
+      {currentView === 'login' ? (
+        <LoginScreen onLogin={handleLogin} />
+      ) : (
+        <div className="flex flex-1 min-h-screen">
+          {/* Barra lateral */}
+          <Sidebar
+            role={role}
+            currentView={currentView}
+            onNavigate={(view) => setCurrentView(view)}
+            onSwitchRole={handleSwitchRole}
+            onLogout={handleLogout}
+            pendingBookingsCount={pendingBookingsCount}
+            activeClientBookingsCount={activeClientBookingsCount}
+          />
+
+          {/* Área de contenido principal */}
+          <div className="flex-1 flex flex-col min-w-0">
+            <Header
+              role={role}
+              currentView={currentView}
+              onNavigate={(view) => setCurrentView(view)}
+              onSwitchRole={handleSwitchRole}
+              onOpenNewService={() => setIsNewServiceOpen(true)}
+              onOpenNewSlot={() => setIsNewSlotOpen(true)}
+              onOpenShareModal={() => setIsShareModalOpen(true)}
+            />
+
+            <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
+              {/* Vistas Proveedor */}
+              {currentView === 'provider-dashboard' && (
+                <ProviderDashboard
+                  bookings={bookings}
+                  services={services}
+                  slots={slots}
+                  onNavigate={(view) => setCurrentView(view)}
+                  onOpenNewService={() => setIsNewServiceOpen(true)}
+                  onOpenNewSlot={() => setIsNewSlotOpen(true)}
+                  onConfirmBooking={handleConfirmBooking}
+                  onCancelBooking={handleCancelBooking}
+                  onOpenShareModal={() => setIsShareModalOpen(true)}
+                  onDeleteSlot={handleDeleteSlot}
+                />
+              )}
+
+              {currentView === 'provider-reservations' && (
+                <ProviderReservations
+                  bookings={bookings}
+                  onConfirmBooking={handleConfirmBooking}
+                  onCancelBooking={handleCancelBooking}
+                  onNavigate={(view) => setCurrentView(view)}
+                />
+              )}
+
+              {currentView === 'provider-agenda' && (
+                <ProviderAgenda
+                  events={calendarEvents}
+                  bookings={bookings}
+                  onConfirmBooking={handleConfirmBooking}
+                  onCancelBooking={handleCancelBooking}
+                  onOpenNewSlot={() => setIsNewSlotOpen(true)}
+                />
+              )}
+
+              {currentView === 'provider-services' && (
+                <ProviderServices
+                  services={services}
+                  onOpenNewService={() => {
+                    setEditingService(null);
+                    setIsNewServiceOpen(true);
+                  }}
+                  onNavigate={(view) => setCurrentView(view)}
+                  onToggleActive={handleToggleServiceActive}
+                  onEditService={(service) => {
+                    setEditingService(service);
+                    setIsNewServiceOpen(true);
+                  }}
+                />
+              )}
+
+              {currentView === 'provider-availability' && (
+                <ProviderAvailability
+                  slots={slots}
+                  onOpenNewSlot={() => setIsNewSlotOpen(true)}
+                  onDeleteSlot={handleDeleteSlot}
+                />
+              )}
+
+              {/* Vistas Cliente */}
+              {currentView === 'client-dashboard' && (
+                <ClientDashboard
+                  bookings={bookings}
+                  services={services}
+                  onNavigate={(view) => setCurrentView(view)}
+                  onSelectServiceToBook={(srv) => {
+                    setSelectedServiceToBook(srv);
+                    setCurrentView('client-booking');
+                  }}
+                  onCancelBooking={handleCancelBooking}
+                />
+              )}
+
+              {currentView === 'client-explore' && (
+                <ClientExplore
+                  services={services}
+                  onNavigate={(view) => setCurrentView(view)}
+                  onSelectServiceToBook={(srv) => {
+                    setSelectedServiceToBook(srv);
+                    setCurrentView('client-booking');
+                  }}
+                />
+              )}
+
+              {currentView === 'client-booking' && (
+                <ClientBooking
+                  service={selectedServiceToBook}
+                  onNavigate={(view) => setCurrentView(view)}
+                  onConfirmNewBooking={handleNewBookingCreated}
+                />
+              )}
+
+              {currentView === 'client-reservations' && (
+                <ClientReservations
+                  bookings={bookings}
+                  onNavigate={(view) => setCurrentView(view)}
+                  onCancelBooking={handleCancelBooking}
+                />
+              )}
+            </main>
+          </div>
+        </div>
+      )}
+
+      {/* Modales */}
+      <BookingConfirmationModal
+        booking={confirmedBookingForModal}
+        onClose={() => setConfirmedBookingForModal(null)}
+        onGoToReservations={() => {
+          setConfirmedBookingForModal(null);
+          setRole('client');
+          setCurrentView('client-reservations');
+        }}
+      />
+
+      <CancelBookingModal
+        booking={bookingToCancel}
+        onClose={() => setBookingToCancel(null)}
+        onConfirmCancel={handleConfirmCancelModal}
+      />
+
+      <NewServiceModal
+        isOpen={isNewServiceOpen}
+        onClose={() => {
+          setIsNewServiceOpen(false);
+          setEditingService(null);
+        }}
+        onAddService={handleAddService}
+        editingService={editingService}
+        onUpdateService={handleUpdateService}
+      />
+
+      <NewSlotModal
+        isOpen={isNewSlotOpen}
+        onClose={() => setIsNewSlotOpen(false)}
+        onAddSlot={handleAddSlot}
+      />
+
+      <SharePublicLinkModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        onOpenClientView={() => {
+          setRole('client');
+          setCurrentView('client-booking');
+        }}
+      />
     </div>
   );
 }
+
+export default App;
