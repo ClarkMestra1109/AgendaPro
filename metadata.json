@@ -1,0 +1,6 @@
+{
+  "name": "AgendaPro - Gestión y Reserva de Servicios",
+  "description": "Plataforma integral de gestión de citas, disponibilidad y reservas multi-rubro para proveedores y clientes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
