@@ -13,19 +13,22 @@ import {
   RotateCcw,
   Sparkles,
   ExternalLink,
-  X
+  X,
+  CalendarDays
 } from 'lucide-react';
 
 interface ClientReservationsProps {
   bookings: Booking[];
   onNavigate: (view: CurrentView) => void;
   onCancelBooking: (booking: Booking) => void;
+  onRescheduleBooking: (booking: Booking) => void;
 }
 
 export const ClientReservations: React.FC<ClientReservationsProps> = ({
   bookings,
   onNavigate,
   onCancelBooking,
+  onRescheduleBooking,
 }) => {
   const [activeTab, setActiveTab] = useState<'upcoming' | 'history' | 'cancelled'>('upcoming');
 
@@ -220,6 +223,14 @@ export const ClientReservations: React.FC<ClientReservationsProps> = ({
                       <span>Ingresar a Meet</span>
                     </a>
                   ) : null}
+
+                  <button
+                    onClick={() => onRescheduleBooking(b)}
+                    className="w-full py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 rounded-xl border border-blue-200 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <CalendarDays className="w-3.5 h-3.5" />
+                    <span>Reprogramar</span>
+                  </button>
 
                   <button
                     onClick={() => onCancelBooking(b)}

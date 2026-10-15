@@ -30,6 +30,7 @@ import { CancelBookingModal } from './components/modals/CancelBookingModal';
 import { NewServiceModal } from './components/modals/NewServiceModal';
 import { NewSlotModal } from './components/modals/NewSlotModal';
 import { SharePublicLinkModal } from './components/modals/SharePublicLinkModal';
+import { RescheduleBookingModal } from './components/modals/RescheduleBookingModal';
 import { CheckCircle2 } from 'lucide-react';
 
 export function App() {
@@ -69,6 +70,7 @@ export function App() {
   // Estados de Modales
 const [confirmedBookingForModal, setConfirmedBookingForModal] = useState<Booking | null>(null);
 const [bookingToCancel, setBookingToCancel] = useState<Booking | null>(null);
+const [bookingToReschedule, setBookingToReschedule] = useState<Booking | null>(null);
 
 const [isNewServiceOpen, setIsNewServiceOpen] = useState(false);
 const [editingService, setEditingService] = useState<ServiceItem | null>(null);
@@ -158,7 +160,21 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     showToast('¡Cita agendada con éxito!');
   };
 
-  const handleAddService = (newService: ServiceItem) => {
+  const handleRescheduleBooking = (bookingId: string, newDate: string, newTime: string) => {
+    setBookings((prev) =>
+      prev.map((b) =>
+        b.id === bookingId
+          ? {
+              ...b,
+              date: newDate,
+              time: newTime,
+              timeSlotFormatted: `${newDate} ${newTime}`,
+            }
+          : b
+      )
+    );
+    showToast('Reserva reprogramada con éxito. Se notificó al cliente.');
+  };  const handleAddService = (newService: ServiceItem) => {
     setServices((prev) => [newService, ...prev]);
     showToast(`Servicio "${newService.title}" publicado en tu catálogo.`);
   };
@@ -192,12 +208,17 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     showToast('Estado del servicio actualizado.');
   };
 
+  const handleDeleteService = (serviceId: string) => {
+    const service = services.find((s) => s.id === serviceId);
+    setServices((prev) => prev.filter((s) => s.id !== serviceId));
+    showToast(`Servicio "${service?.title}" eliminado del catálogo.`);
+  };
+
   // Contadores
   const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
   const activeClientBookingsCount = bookings.filter(
     (b) => b.status === 'confirmed' || b.status === 'pending'
   ).length;
-
   return (
     <div className="min-h-screen bg-[#f8faff] text-[#0b1c30] flex flex-col selection:bg-blue-100 selection:text-blue-900 font-sans">
       {/* Notificación flotante (Toast) */}
@@ -222,6 +243,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
             onLogout={handleLogout}
             pendingBookingsCount={pendingBookingsCount}
             activeClientBookingsCount={activeClientBookingsCount}
+            servicesCount={services.length}
           />
 
           {/* Área de contenido principal */}
@@ -258,6 +280,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                   bookings={bookings}
                   onConfirmBooking={handleConfirmBooking}
                   onCancelBooking={handleCancelBooking}
+                  onRescheduleBooking={(booking) => setBookingToReschedule(booking)}
                   onNavigate={(view) => setCurrentView(view)}
                 />
               )}
@@ -285,6 +308,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                     setEditingService(service);
                     setIsNewServiceOpen(true);
                   }}
+                  onDeleteService={handleDeleteService}
                 />
               )}
 
@@ -334,6 +358,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                   bookings={bookings}
                   onNavigate={(view) => setCurrentView(view)}
                   onCancelBooking={handleCancelBooking}
+                  onRescheduleBooking={(booking) => setBookingToReschedule(booking)}
                 />
               )}
             </main>
@@ -356,6 +381,12 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
         booking={bookingToCancel}
         onClose={() => setBookingToCancel(null)}
         onConfirmCancel={handleConfirmCancelModal}
+      />
+
+      <RescheduleBookingModal
+        booking={bookingToReschedule}
+        onClose={() => setBookingToReschedule(null)}
+        onConfirmReschedule={handleRescheduleBooking}
       />
 
       <NewServiceModal

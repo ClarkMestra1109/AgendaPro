@@ -13,13 +13,15 @@ import {
   MapPin,
   Sparkles,
   Phone,
-  Mail
+  Mail,
+  CalendarDays
 } from 'lucide-react';
 
 interface ProviderReservationsProps {
   bookings: Booking[];
   onConfirmBooking: (id: string) => void;
   onCancelBooking: (booking: Booking) => void;
+  onRescheduleBooking: (booking: Booking) => void;
   onNavigate: (view: CurrentView) => void;
 }
 
@@ -27,6 +29,7 @@ export const ProviderReservations: React.FC<ProviderReservationsProps> = ({
   bookings,
   onConfirmBooking,
   onCancelBooking,
+  onRescheduleBooking,
   onNavigate,
 }) => {
   const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'confirmed' | 'cancelled'>('all');
@@ -261,6 +264,16 @@ export const ProviderReservations: React.FC<ProviderReservationsProps> = ({
                         >
                           <Check className="w-3.5 h-3.5" />
                           <span>Confirmar</span>
+                        </button>
+                      )}
+
+                      {b.status !== 'cancelled' && (
+                        <button
+                          onClick={() => onRescheduleBooking(b)}
+                          className="px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200 transition-colors"
+                          title="Reprogramar reserva"
+                        >
+                          <CalendarDays className="w-3.5 h-3.5" />
                         </button>
                       )}
 

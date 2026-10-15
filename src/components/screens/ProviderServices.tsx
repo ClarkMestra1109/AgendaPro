@@ -8,6 +8,7 @@ interface ProviderServicesProps {
   onNavigate: (view: CurrentView) => void;
   onToggleActive: (id: string) => void;
   onEditService: (service: ServiceItem) => void;
+  onDeleteService: (id: string) => void;
 }
 
 export const ProviderServices: React.FC<ProviderServicesProps> = ({
@@ -16,6 +17,7 @@ export const ProviderServices: React.FC<ProviderServicesProps> = ({
   onNavigate,
   onToggleActive,
   onEditService,
+  onDeleteService,
 }
 
 
@@ -105,9 +107,9 @@ export const ProviderServices: React.FC<ProviderServicesProps> = ({
                 <span>Editar</span>
               </button>
               <button
-                onClick={() => onToggleActive(srv.id)}
-                className="px-3 py-2 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl border border-slate-200 transition-colors"
-                title="Pausar o despublicar"
+                onClick={() => onDeleteService(srv.id)}
+                className="px-3 py-2 bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl border border-slate-200 hover:border-red-200 transition-colors"
+                title="Eliminar servicio"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
