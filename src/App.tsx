@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AuthenticatedUser, authenticateAccount, registerAccount } from './data/authStorage';
 import {
   UserRole,
   CurrentView,
@@ -7,12 +8,6 @@ import {
   AvailabilitySlot,
   CalendarEvent,
 } from './types';
-import {
-  INITIAL_SERVICES,
-  INITIAL_BOOKINGS,
-  INITIAL_SLOTS,
-  INITIAL_CALENDAR_EVENTS,
-} from './data/mockData';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { LoginScreen } from './components/screens/LoginScreen';
@@ -33,39 +28,28 @@ import { SharePublicLinkModal } from './components/modals/SharePublicLinkModal';
 import { RescheduleBookingModal } from './components/modals/RescheduleBookingModal';
 import { CheckCircle2 } from 'lucide-react';
 
-export function App() {
-  // Configuración de Rol
-  const [role, setRole] = useState<UserRole>(() => {
-    const saved = localStorage.getItem('agendapro_role');
-    return (saved as UserRole) || 'provider';
-  });
+function leerListaGuardada<T>(clave: string): T[] {
+  try {
+    const guardado = localStorage.getItem(clave);
+    if (!guardado) return [];
+    const datos: unknown = JSON.parse(guardado);
+    return Array.isArray(datos) ? (datos as T[]) : [];
+  } catch {
+    return [];
+  }
+}
 
-  // Vista inicial obligatoria en Login al entrar a la página
+export function App() {
+  const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
+  const [role, setRole] = useState<UserRole>('client');
   const [currentView, setCurrentView] = useState<CurrentView>('login');
 
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem('agendapro_bookings');
-    return saved ? JSON.parse(saved) : INITIAL_BOOKINGS;
-  });
-
-  const [services, setServices] = useState<ServiceItem[]>(() => {
-    const saved = localStorage.getItem('agendapro_services');
-    return saved ? JSON.parse(saved) : INITIAL_SERVICES;
-  });
-
-  const [slots, setSlots] = useState<AvailabilitySlot[]>(() => {
-    const saved = localStorage.getItem('agendapro_slots');
-    return saved ? JSON.parse(saved) : INITIAL_SLOTS;
-  });
-
-  const [calendarEvents] = useState<CalendarEvent[]>(() => {
-    const saved = localStorage.getItem('agendapro_events');
-    return saved ? JSON.parse(saved) : INITIAL_CALENDAR_EVENTS;
-  });
-
-  const [selectedServiceToBook, setSelectedServiceToBook] = useState<ServiceItem>(
-    services[0] || INITIAL_SERVICES[0]
-  );
+  // Los arreglos empiezan vacíos: ya no se importan reservas, servicios ni horarios de demostración.
+  const [bookings, setBookings] = useState<Booking[]>(() => leerListaGuardada<Booking>('agendapro_bookings_v2'));
+  const [services, setServices] = useState<ServiceItem[]>(() => leerListaGuardada<ServiceItem>('agendapro_services_v2'));
+  const [slots, setSlots] = useState<AvailabilitySlot[]>(() => leerListaGuardada<AvailabilitySlot>('agendapro_slots_v2'));
+  const [calendarEvents] = useState<CalendarEvent[]>([]);
+  const [selectedServiceToBook, setSelectedServiceToBook] = useState<ServiceItem | null>(null);
 
   // Estados de Modales
 const [confirmedBookingForModal, setConfirmedBookingForModal] = useState<Booking | null>(null);
@@ -86,50 +70,70 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Sincronización con LocalStorage
+  // Limpiar una sola vez las claves antiguas que contenían los datos de demostración.
   useEffect(() => {
-    localStorage.setItem('agendapro_role', role);
-  }, [role]);
+    const claveLimpieza = 'agendapro_demo_data_removed_v1';
+    if (localStorage.getItem(claveLimpieza) !== 'true') {
+      [
+        'agendapro_role',
+        'agendapro_bookings',
+        'agendapro_services',
+        'agendapro_slots',
+        'agendapro_events',
+        'agendapro_users',
+        'agendapro_accounts',
+        'agendapro_accounts_v1',
+      ].forEach((clave) => localStorage.removeItem(clave));
+      localStorage.setItem(claveLimpieza, 'true');
+    }
+  }, []);
 
+  // Persistencia local del prototipo. Servicios y horarios publicados son visibles en el catálogo;
+  // las pantallas de reservas filtran los registros por el correo del cliente o proveedor.
   useEffect(() => {
-    localStorage.setItem('agendapro_bookings', JSON.stringify(bookings));
+    localStorage.setItem('agendapro_bookings_v2', JSON.stringify(bookings));
   }, [bookings]);
 
   useEffect(() => {
-    localStorage.setItem('agendapro_services', JSON.stringify(services));
+    localStorage.setItem('agendapro_services_v2', JSON.stringify(services));
   }, [services]);
 
   useEffect(() => {
-    localStorage.setItem('agendapro_slots', JSON.stringify(slots));
+    localStorage.setItem('agendapro_slots_v2', JSON.stringify(slots));
   }, [slots]);
 
-  // Cambios de rol y login
-  const handleSwitchRole = () => {
-    if (role === 'provider') {
-      setRole('client');
-      setCurrentView('client-dashboard');
-      showToast('Cambiado a Modo Cliente VIP (Carlos Mendoza)');
-    } else {
-      setRole('provider');
-      setCurrentView('provider-dashboard');
-      showToast('Cambiado a Modo Proveedor (Laura Morales)');
-    }
+  const entrarConCuenta = (usuario: AuthenticatedUser) => {
+    setCurrentUser(usuario);
+    setRole(usuario.role);
+    setSelectedServiceToBook(null);
+    setCurrentView(usuario.role === 'provider' ? 'provider-dashboard' : 'client-dashboard');
+    showToast(`Bienvenido/a, ${usuario.name}.`);
   };
 
-  const handleLogin = (selectedRole: UserRole) => {
-    setRole(selectedRole);
-    if (selectedRole === 'provider') {
-      setCurrentView('provider-dashboard');
-      showToast('¡Bienvenida, Laura Morales!');
-    } else {
-      setCurrentView('client-dashboard');
-      showToast('¡Bienvenido, Carlos Mendoza!');
-    }
+  const handleLogin = async (email: string, password: string) => {
+    const resultado = await authenticateAccount(email, password);
+    if (resultado.success && resultado.user) entrarConCuenta(resultado.user);
+    return resultado;
+  };
+
+  const handleRegister = async (name: string, email: string, password: string, selectedRole: UserRole) => {
+    const resultado = await registerAccount(name, email, password, selectedRole);
+    if (resultado.success && resultado.user) entrarConCuenta(resultado.user);
+    return resultado;
+  };
+
+  const handleSwitchRole = () => {
+    setCurrentUser(null);
+    setSelectedServiceToBook(null);
+    setCurrentView('login');
+    showToast('Inicia sesión con una cuenta del otro rol para cambiar de perfil.');
   };
 
   const handleLogout = () => {
+    setCurrentUser(null);
+    setSelectedServiceToBook(null);
     setCurrentView('login');
-    showToast('Sesión cerrada con éxito');
+    showToast('Sesión cerrada. Tus datos guardados no se borraron.');
   };
 
   // Acciones de reservas
@@ -137,7 +141,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     setBookings((prev) =>
       prev.map((b) => (b.id === bookingId ? { ...b, status: 'confirmed' } : b))
     );
-    showToast('¡Reserva confirmada con éxito! Se notificó al cliente.');
+    showToast('Reserva confirmada correctamente.');
   };
 
   const handleCancelBooking = (booking: Booking) => {
@@ -145,59 +149,127 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   };
 
   const handleConfirmCancelModal = (bookingId: string, reason: string) => {
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId ? { ...b, status: 'cancelled', notes: reason } : b
-      )
-    );
+    const reservaCancelada = bookings.find((booking) => booking.id === bookingId);
+    setBookings((prev) => prev.map((booking) =>
+      booking.id === bookingId ? { ...booking, status: 'cancelled', notes: reason } : booking,
+    ));
+    if (reservaCancelada?.availabilitySlotId) {
+      setSlots((prev) => prev.map((slot) => slot.id === reservaCancelada.availabilitySlotId
+        ? { ...slot, isBooked: false }
+        : slot));
+    }
     setBookingToCancel(null);
-    showToast('Reserva cancelada y cupo liberado en el sistema.');
+    showToast('Reserva cancelada y horario liberado.');
   };
 
   const handleNewBookingCreated = (newBooking: Booking) => {
+    const yaReservado = bookings.some((booking) => {
+      if (booking.status !== 'pending' && booking.status !== 'confirmed') return false;
+      if (newBooking.availabilitySlotId && booking.availabilitySlotId === newBooking.availabilitySlotId) return true;
+      return Boolean(newBooking.dateISO && newBooking.startTime && booking.dateISO === newBooking.dateISO
+        && booking.startTime === newBooking.startTime && booking.providerEmail === newBooking.providerEmail);
+    });
+    if (yaReservado) {
+      showToast('Ese horario acaba de ser reservado. Elige otra franja.');
+      return;
+    }
     setBookings((prev) => [newBooking, ...prev]);
+    if (newBooking.availabilitySlotId) {
+      setSlots((prev) => prev.map((slot) => slot.id === newBooking.availabilitySlotId
+        ? { ...slot, isBooked: true }
+        : slot));
+    }
     setConfirmedBookingForModal(newBooking);
-    showToast('¡Cita agendada con éxito!');
+    showToast('Solicitud de reserva enviada; falta la confirmación del proveedor.');
   };
 
-  const handleRescheduleBooking = (bookingId: string, newDate: string, newTime: string) => {
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? {
-              ...b,
-              date: newDate,
-              time: newTime,
-              timeSlotFormatted: `${newDate} ${newTime}`,
-            }
-          : b
-      )
-    );
-    showToast('Reserva reprogramada con éxito. Se notificó al cliente.');
-  };  const handleAddService = (newService: ServiceItem) => {
-    setServices((prev) => [newService, ...prev]);
-    showToast(`Servicio "${newService.title}" publicado en tu catálogo.`);
+  const handleRescheduleBooking = (bookingId: string, newSlot: AvailabilitySlot): boolean => {
+    const reservaAnterior = bookings.find((booking) => booking.id === bookingId);
+    const franjaActual = slots.find((slot) => slot.id === newSlot.id);
+    if (!reservaAnterior || !franjaActual || franjaActual.isBooked) {
+      showToast('Ese horario ya no está disponible. Selecciona otra franja.');
+      return false;
+    }
+
+    const yaReservado = bookings.some((booking) => booking.id !== bookingId
+      && (booking.status === 'pending' || booking.status === 'confirmed')
+      && ((booking.availabilitySlotId && booking.availabilitySlotId === newSlot.id)
+        || Boolean(booking.dateISO === newSlot.dateISO && booking.startTime === newSlot.startTime
+          && booking.providerEmail === newSlot.providerEmail)));
+    if (yaReservado) {
+      showToast('Ese horario ya fue solicitado por otra reserva.');
+      return false;
+    }
+
+    const horaNueva = newSlot.startTime ? (() => {
+      const [horas, minutos] = newSlot.startTime!.split(':').map(Number);
+      return `${String(horas % 12 || 12).padStart(2, '0')}:${String(minutos).padStart(2, '0')} ${horas >= 12 ? 'PM' : 'AM'}`;
+    })() : newSlot.timeRange;
+    const fechaNueva = newSlot.fullDate || newSlot.dateISO || '';
+
+    setBookings((prev) => prev.map((booking) => booking.id === bookingId
+      ? {
+          ...booking,
+          date: fechaNueva,
+          dateISO: newSlot.dateISO,
+          time: horaNueva,
+          startTime: newSlot.startTime,
+          availabilitySlotId: newSlot.id,
+          timeSlotFormatted: `${fechaNueva} • ${newSlot.timeRange}`,
+          status: 'pending',
+        }
+      : booking));
+    setSlots((prev) => prev.map((slot) => {
+      if (slot.id === reservaAnterior.availabilitySlotId) return { ...slot, isBooked: false };
+      if (slot.id === newSlot.id) return { ...slot, isBooked: true };
+      return slot;
+    }));
+    showToast('Solicitud de reprogramación enviada al proveedor.');
+    return true;
+  };
+
+  const handleAddService = (newService: ServiceItem) => {
+    const servicioConPropietario: ServiceItem = {
+      ...newService,
+      providerEmail: currentUser?.email,
+      providerName: currentUser?.name || newService.providerName,
+      providerStudio: currentUser?.name || newService.providerStudio,
+    };
+    setServices((prev) => [servicioConPropietario, ...prev]);
+    showToast(`Servicio "${servicioConPropietario.title}" publicado en el catálogo.`);
   };
 
   const handleUpdateService = (updatedService: ServiceItem) => {
-  setServices((prev) =>
-    prev.map((service) =>
-      service.id === updatedService.id ? updatedService : service
-    )
-  );
+    setServices((prev) => prev.map((service) => service.id === updatedService.id
+      ? { ...updatedService, providerEmail: currentUser?.email || updatedService.providerEmail, providerName: currentUser?.name || updatedService.providerName, providerStudio: currentUser?.name || updatedService.providerStudio }
+      : service));
+    setEditingService(null);
+    showToast(`Servicio "${updatedService.title}" actualizado correctamente.`);
+  };
 
-  setEditingService(null);
-
-  showToast(`Servicio "${updatedService.title}" actualizado correctamente.`);
-};
-
-  const handleAddSlot = (newSlot: AvailabilitySlot) => {
-    setSlots((prev) => [newSlot, ...prev]);
-    showToast('Nueva franja horaria publicada con éxito.');
+  const handleAddSlots = (newSlots: AvailabilitySlot[]) => {
+    const slotsConPropietario = newSlots.map((slot) => ({ ...slot, providerEmail: currentUser?.email }));
+    const slotsNuevos = slotsConPropietario.filter((slot) => !slots.some((existente) =>
+      existente.providerEmail === slot.providerEmail
+      && existente.dateISO === slot.dateISO
+      && existente.startTime === slot.startTime,
+    ));
+    if (slotsNuevos.length === 0) {
+      showToast('No se añadieron horarios: esas franjas ya existen.');
+      return;
+    }
+    setSlots((prev) => [...slotsNuevos, ...prev]);
+    showToast(`Se publicaron ${slotsNuevos.length} franja(s) horaria(s).`);
   };
 
   const handleDeleteSlot = (slotId: string) => {
-    setSlots((prev) => prev.filter((s) => s.id !== slotId));
+    const reservaActiva = bookings.some((booking) => booking.availabilitySlotId === slotId
+      && (booking.status === 'pending' || booking.status === 'confirmed'));
+    if (reservaActiva) {
+      showToast('No puedes eliminar un horario que tiene una reserva activa. Cancela la reserva primero.');
+      return;
+    }
+    setSlots((prev) => prev.filter((slot) => slot.id !== slotId));
     showToast('Franja horaria eliminada.');
   };
 
@@ -214,11 +286,22 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     showToast(`Servicio "${service?.title}" eliminado del catálogo.`);
   };
 
-  // Contadores
-  const pendingBookingsCount = bookings.filter((b) => b.status === 'pending').length;
-  const activeClientBookingsCount = bookings.filter(
-    (b) => b.status === 'confirmed' || b.status === 'pending'
-  ).length;
+  // Cada rol ve sus propias reservas. Los servicios y horarios publicados son compartidos en el catálogo.
+  const reservasProveedor = currentUser
+    ? bookings.filter((booking) => booking.providerEmail === currentUser.email)
+    : [];
+  const reservasCliente = currentUser
+    ? bookings.filter((booking) => booking.clientEmail.trim().toLowerCase() === currentUser.email.toLowerCase())
+    : [];
+  const serviciosProveedor = currentUser
+    ? services.filter((service) => service.providerEmail === currentUser.email)
+    : [];
+  const franjasProveedor = currentUser
+    ? slots.filter((slot) => slot.providerEmail === currentUser.email)
+    : [];
+  const serviciosPublicos = services.filter((service) => service.isActive);
+  const pendingBookingsCount = reservasProveedor.filter((booking) => booking.status === 'pending').length;
+  const activeClientBookingsCount = reservasCliente.filter((booking) => booking.status === 'confirmed' || booking.status === 'pending').length;
   return (
     <div className="min-h-screen bg-[#f8faff] text-[#0b1c30] flex flex-col selection:bg-blue-100 selection:text-blue-900 font-sans">
       {/* Notificación flotante (Toast) */}
@@ -230,8 +313,8 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
       )}
 
       {/* Enrutador de pantallas */}
-      {currentView === 'login' ? (
-        <LoginScreen onLogin={handleLogin} />
+      {currentView === 'login' || !currentUser ? (
+        <LoginScreen onLogin={handleLogin} onRegister={handleRegister} />
       ) : (
         <div className="flex flex-1 min-h-screen">
           {/* Barra lateral */}
@@ -243,7 +326,10 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
             onLogout={handleLogout}
             pendingBookingsCount={pendingBookingsCount}
             activeClientBookingsCount={activeClientBookingsCount}
-            servicesCount={services.length}
+            servicesCount={serviciosProveedor.length}
+            availableSlotsCount={franjasProveedor.filter((slot) => !slot.isBooked).length}
+            currentUserName={currentUser.name}
+            currentUserEmail={currentUser.email}
           />
 
           {/* Área de contenido principal */}
@@ -256,15 +342,18 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
               onOpenNewService={() => setIsNewServiceOpen(true)}
               onOpenNewSlot={() => setIsNewSlotOpen(true)}
               onOpenShareModal={() => setIsShareModalOpen(true)}
+              currentUserName={currentUser.name}
+              currentUserEmail={currentUser.email}
             />
 
             <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
               {/* Vistas Proveedor */}
               {currentView === 'provider-dashboard' && (
                 <ProviderDashboard
-                  bookings={bookings}
-                  services={services}
-                  slots={slots}
+                  bookings={reservasProveedor}
+                  services={serviciosProveedor}
+                  slots={franjasProveedor}
+                  providerName={currentUser.name}
                   onNavigate={(view) => setCurrentView(view)}
                   onOpenNewService={() => setIsNewServiceOpen(true)}
                   onOpenNewSlot={() => setIsNewSlotOpen(true)}
@@ -277,7 +366,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
               {currentView === 'provider-reservations' && (
                 <ProviderReservations
-                  bookings={bookings}
+                  bookings={reservasProveedor}
                   onConfirmBooking={handleConfirmBooking}
                   onCancelBooking={handleCancelBooking}
                   onRescheduleBooking={(booking) => setBookingToReschedule(booking)}
@@ -288,7 +377,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
               {currentView === 'provider-agenda' && (
                 <ProviderAgenda
                   events={calendarEvents}
-                  bookings={bookings}
+                  bookings={reservasProveedor}
                   onConfirmBooking={handleConfirmBooking}
                   onCancelBooking={handleCancelBooking}
                   onOpenNewSlot={() => setIsNewSlotOpen(true)}
@@ -297,7 +386,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
               {currentView === 'provider-services' && (
                 <ProviderServices
-                  services={services}
+                  services={serviciosProveedor}
                   onOpenNewService={() => {
                     setEditingService(null);
                     setIsNewServiceOpen(true);
@@ -314,7 +403,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
               {currentView === 'provider-availability' && (
                 <ProviderAvailability
-                  slots={slots}
+                  slots={franjasProveedor}
                   onOpenNewSlot={() => setIsNewSlotOpen(true)}
                   onDeleteSlot={handleDeleteSlot}
                 />
@@ -323,8 +412,9 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
               {/* Vistas Cliente */}
               {currentView === 'client-dashboard' && (
                 <ClientDashboard
-                  bookings={bookings}
-                  services={services}
+                  bookings={reservasCliente}
+                  services={serviciosPublicos}
+                  clientName={currentUser.name}
                   onNavigate={(view) => setCurrentView(view)}
                   onSelectServiceToBook={(srv) => {
                     setSelectedServiceToBook(srv);
@@ -336,7 +426,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
               {currentView === 'client-explore' && (
                 <ClientExplore
-                  services={services}
+                  services={serviciosPublicos}
                   onNavigate={(view) => setCurrentView(view)}
                   onSelectServiceToBook={(srv) => {
                     setSelectedServiceToBook(srv);
@@ -346,16 +436,28 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
               )}
 
               {currentView === 'client-booking' && (
-                <ClientBooking
-                  service={selectedServiceToBook}
-                  onNavigate={(view) => setCurrentView(view)}
-                  onConfirmNewBooking={handleNewBookingCreated}
-                />
+                selectedServiceToBook ? (
+                  <ClientBooking
+                    service={selectedServiceToBook}
+                    slots={slots}
+                    bookings={bookings}
+                    clientName={currentUser.name}
+                    clientEmail={currentUser.email}
+                    onNavigate={(view) => setCurrentView(view)}
+                    onConfirmNewBooking={handleNewBookingCreated}
+                  />
+                ) : (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center space-y-3">
+                    <p className="text-sm font-bold text-slate-800">Primero selecciona un servicio</p>
+                    <p className="text-xs text-slate-500">Explora el catálogo para consultar sus horarios disponibles.</p>
+                    <button onClick={() => setCurrentView('client-explore')} className="px-4 py-2 rounded-xl bg-blue-700 text-white text-xs font-bold">Explorar servicios</button>
+                  </div>
+                )
               )}
 
               {currentView === 'client-reservations' && (
                 <ClientReservations
-                  bookings={bookings}
+                  bookings={reservasCliente}
                   onNavigate={(view) => setCurrentView(view)}
                   onCancelBooking={handleCancelBooking}
                   onRescheduleBooking={(booking) => setBookingToReschedule(booking)}
@@ -385,6 +487,8 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
       <RescheduleBookingModal
         booking={bookingToReschedule}
+        slots={slots}
+        bookings={bookings}
         onClose={() => setBookingToReschedule(null)}
         onConfirmReschedule={handleRescheduleBooking}
       />
@@ -403,7 +507,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
       <NewSlotModal
         isOpen={isNewSlotOpen}
         onClose={() => setIsNewSlotOpen(false)}
-        onAddSlot={handleAddSlot}
+        onAddSlots={handleAddSlots}
       />
 
       <SharePublicLinkModal
@@ -411,7 +515,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
         onClose={() => setIsShareModalOpen(false)}
         onOpenClientView={() => {
           setRole('client');
-          setCurrentView('client-booking');
+          setCurrentView(selectedServiceToBook ? 'client-booking' : 'client-explore');
         }}
       />
     </div>

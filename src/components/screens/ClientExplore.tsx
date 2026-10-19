@@ -80,25 +80,25 @@ export const ClientExplore: React.FC<ClientExploreProps> = ({
           <div className="space-y-2 max-w-xl">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-xs font-semibold">
               <ShieldCheck className="w-3.5 h-3.5 text-blue-300" />
-              <span>CATÁLOGO VERIFICADO PARA CLIENTES PREFERENTES</span>
+              <span>CATÁLOGO DE SERVICIOS PUBLICADOS</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-display">
               Explorar Servicios
             </h1>
             <p className="text-blue-200/80 text-xs sm:text-sm leading-relaxed">
-              Encuentra y agenda citas con los mejores profesionales independientes y negocios locales verificados. Disponibilidad en tiempo real y confirmación inmediata.
+              Consulta los servicios que han publicado los proveedores y solicita una cita en los horarios que aparezcan disponibles.
             </p>
           </div>
 
           <div className="flex items-center gap-4 shrink-0 bg-white/10 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 text-center">
             <div>
-              <div className="text-2xl font-extrabold font-display">140+</div>
-              <div className="text-[11px] text-blue-200">Servicios activos</div>
+              <div className="text-2xl font-extrabold font-display">{services.length}</div>
+              <div className="text-[11px] text-blue-200">Servicios publicados</div>
             </div>
             <div className="w-px h-8 bg-white/20"></div>
             <div>
-              <div className="text-2xl font-extrabold font-display">100%</div>
-              <div className="text-[11px] text-blue-200">Reserva segura</div>
+              <div className="text-2xl font-extrabold font-display">Agenda</div>
+              <div className="text-[11px] text-blue-200">Horarios publicados</div>
             </div>
           </div>
         </div>
@@ -181,6 +181,12 @@ export const ClientExplore: React.FC<ClientExploreProps> = ({
 
       {/* Services Grid (Image 20) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredServices.length === 0 && (
+          <div className="col-span-full bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center">
+            <h2 className="mt-3 text-sm font-bold text-slate-800">No hay servicios para mostrar</h2>
+            <p className="mt-1 text-xs text-slate-500">Cuando un proveedor publique un servicio activo, aparecerá aquí.</p>
+          </div>
+        )}
         {filteredServices.map((service) => (
           <div
             key={service.id}
@@ -189,11 +195,17 @@ export const ClientExplore: React.FC<ClientExploreProps> = ({
             <div>
               {/* Image Banner */}
               <div className="h-48 relative overflow-hidden">
-                <img
-                  src={service.imageUrl}
-                  alt={service.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                />
+                {service.imageUrl ? (
+                  <img
+                    src={service.imageUrl}
+                    alt={service.title}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-50 text-blue-700 text-4xl font-extrabold" aria-label="Servicio sin imagen">
+                    {service.title.slice(0, 1).toUpperCase()}
+                  </div>
+                )}
                 <div className="absolute top-3 left-3 flex items-center gap-1.5">
                   <span className="bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-extrabold px-2 py-0.5 rounded">
                     {service.modalityBadge}

@@ -45,6 +45,12 @@ export const ProviderServices: React.FC<ProviderServicesProps> = ({
       </div>
 
       {/* Services Grid */}
+      {services.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center">
+          <h2 className="text-sm font-bold text-slate-800">Aún no has publicado servicios</h2>
+          <p className="mt-1 text-xs text-slate-500">Crea un servicio para que los clientes puedan consultarlo en el catálogo.</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {services.map((srv) => (
           <div
@@ -52,12 +58,12 @@ export const ProviderServices: React.FC<ProviderServicesProps> = ({
             className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs hover:shadow-md hover:border-blue-200 transition-all flex flex-col justify-between"
           >
             <div>
-              <div className="h-44 relative overflow-hidden">
-                <img
-                  src={srv.imageUrl}
-                  alt={srv.title}
-                  className="w-full h-full object-cover"
-                />
+              <div className="h-44 relative overflow-hidden bg-slate-100 flex items-center justify-center">
+                {srv.imageUrl ? (
+                  <img src={srv.imageUrl} alt={srv.title} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-4xl font-extrabold text-blue-700" aria-label="Servicio sin imagen">{srv.title.slice(0, 1).toUpperCase()}</span>
+                )}
                 <span className="absolute top-2.5 left-2.5 bg-slate-900/80 backdrop-blur-sm text-white text-[10px] font-extrabold px-2 py-0.5 rounded">
                   {srv.modalityBadge}
                 </span>
@@ -71,10 +77,12 @@ export const ProviderServices: React.FC<ProviderServicesProps> = ({
                   <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
                     {srv.category}
                   </span>
-                  <div className="flex items-center gap-1 text-amber-500 font-bold text-xs">
-                    <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                    <span>{srv.rating}</span>
-                  </div>
+                  {srv.reviewsCount > 0 ? (
+                    <div className="flex items-center gap-1 text-amber-500 font-bold text-xs">
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                      <span>{srv.rating} ({srv.reviewsCount})</span>
+                    </div>
+                  ) : <span className="text-[11px] text-slate-400">Sin reseñas</span>}
                 </div>
 
                 <h3 className="text-sm font-extrabold text-[#0b1c30] font-display line-clamp-1">
@@ -117,6 +125,7 @@ export const ProviderServices: React.FC<ProviderServicesProps> = ({
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 };

@@ -34,6 +34,12 @@ export const ProviderAvailability: React.FC<ProviderAvailabilityProps> = ({
         </button>
       </div>
 
+      {slots.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center">
+          <h2 className="text-sm font-bold text-slate-800">No has publicado horarios</h2>
+          <p className="mt-1 text-xs text-slate-500">Crea una franja individual o activa la repetición semanal para generar varias.</p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {slots.map((slot) => (
           <div
@@ -47,8 +53,9 @@ export const ProviderAvailability: React.FC<ProviderAvailabilityProps> = ({
                 </span>
                 <button
                   onClick={() => onDeleteSlot(slot.id)}
-                  className="text-slate-300 hover:text-red-600 p-1 rounded-lg transition-colors"
-                  title="Eliminar franja"
+                  disabled={slot.isBooked}
+                  className="text-slate-300 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed p-1 rounded-lg transition-colors"
+                  title={slot.isBooked ? 'No se puede eliminar una franja reservada' : 'Eliminar franja'}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -72,15 +79,16 @@ export const ProviderAvailability: React.FC<ProviderAvailabilityProps> = ({
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-emerald-600 font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                Cupo disponible
+              <span className={`${slot.isBooked ? 'text-amber-700' : 'text-emerald-600'} font-bold flex items-center gap-1`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${slot.isBooked ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                {slot.isBooked ? 'Horario reservado' : 'Cupo disponible'}
               </span>
-              <span className="text-slate-400 text-[11px]">Visible en web</span>
+              <span className="text-slate-400 text-[11px]">Visible para clientes</span>
             </div>
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 };

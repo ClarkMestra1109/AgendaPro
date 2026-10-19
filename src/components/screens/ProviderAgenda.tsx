@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { CalendarEvent, Booking } from '../../types';
 import {
   Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
   Plus,
   Clock,
   CheckCircle2,
@@ -31,10 +29,21 @@ export const ProviderAgenda: React.FC<ProviderAgendaProps> = ({
   onCancelBooking,
   onOpenNewSlot,
 }) => {
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(events[1]); // Default select Carlos Gómez
-  const [currentWeekLabel, setCurrentWeekLabel] = useState('24 - 30 Octubre 2024');
-
-  const days = ['Lun 24', 'Mar 25', 'Hoy Mié 26', 'Jue 27'] as const;
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const hoy = new Date();
+  const desplazamientoLunes = (hoy.getDay() + 6) % 7;
+  const inicioSemana = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - desplazamientoLunes);
+  const finSemana = new Date(inicioSemana);
+  finSemana.setDate(inicioSemana.getDate() + 6);
+  const diasSemana = Array.from({ length: 4 }, (_, indice) => {
+    const fecha = new Date(inicioSemana);
+    fecha.setDate(inicioSemana.getDate() + indice);
+    const abreviaturas = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const esHoy = fecha.toDateString() === hoy.toDateString();
+    return { etiqueta: `${esHoy ? 'Hoy ' : ''}${abreviaturas[fecha.getDay()]} ${fecha.getDate()}`, esHoy };
+  });
+  const currentWeekLabel = `${inicioSemana.getDate()} - ${finSemana.getDate()} ${finSemana.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })}`;
+  const days = diasSemana.map((dia) => dia.etiqueta);
   const hours = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 
   const formatHourLabel = (h: number) => {
@@ -52,19 +61,13 @@ export const ProviderAgenda: React.FC<ProviderAgendaProps> = ({
             Mi Agenda de Servicios
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Cronograma semanal interactivo con sincronización bidireccional en tiempo real
+            Vista semanal de los eventos de la agenda.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-white border border-slate-200 rounded-xl p-1 shadow-2xs">
-            <button className="p-1 hover:bg-slate-100 rounded-lg text-slate-500">
-              <ChevronLeft className="w-4 h-4" />
-            </button>
             <span className="text-xs font-bold text-slate-700 px-3">{currentWeekLabel}</span>
-            <button className="p-1 hover:bg-slate-100 rounded-lg text-slate-500">
-              <ChevronRight className="w-4 h-4" />
-            </button>
           </div>
 
           <button
@@ -107,38 +110,17 @@ export const ProviderAgenda: React.FC<ProviderAgendaProps> = ({
           {/* Day Headers */}
           <div className="grid grid-cols-5 border-b border-slate-200 pb-3 mb-2 min-w-[540px]">
             <div className="text-[11px] font-bold text-slate-400 uppercase text-center">Hora</div>
-            {days.map((day) => {
-              const isToday = day.includes('Hoy');
-              return (
-                <div key={day} className="text-center">
-                  <span
-                    className={`inline-block text-xs font-extrabold px-3 py-1 rounded-xl ${
-                      isToday
-                        ? 'bg-blue-700 text-white shadow-xs'
-                        : 'text-slate-700 bg-slate-100'
-                    }`}
-                  >
-                    {day}
-                  </span>
-                </div>
-              );
-            })}
+            {diasSemana.map((dia) => (
+              <div key={dia.etiqueta} className="text-center">
+                <span className={`inline-block text-xs font-extrabold px-3 py-1 rounded-xl ${dia.esHoy ? 'bg-blue-700 text-white shadow-xs' : 'text-slate-700 bg-slate-100'}`}>
+                  {dia.etiqueta}
+                </span>
+              </div>
+            ))}
           </div>
 
           {/* Timeline Rows */}
           <div className="relative min-w-[540px]">
-            {/* Red / Blue current time marker line */}
-            <div
-              style={{ top: '220px' }}
-              className="absolute left-0 right-0 z-20 flex items-center pointer-events-none"
-            >
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500 -ml-1"></span>
-              <div className="w-full h-0.5 bg-red-400/80"></div>
-              <span className="text-[9px] font-extrabold bg-red-500 text-white px-1.5 py-0.5 rounded shadow-xs ml-1">
-                10:45 AM
-              </span>
-            </div>
-
             {hours.map((hour) => (
               <div key={hour} className="grid grid-cols-5 border-b border-slate-100 h-16 relative">
                 {/* Hour label */}
@@ -249,9 +231,6 @@ export const ProviderAgenda: React.FC<ProviderAgendaProps> = ({
                   </div>
                 )}
 
-                <p className="text-[11px] text-slate-500 italic bg-blue-50/50 p-2.5 rounded-xl border border-blue-100/60">
-                  Recordatorio automático configurado para enviar por WhatsApp al cliente 2 horas antes de la cita.
-                </p>
 
                 {/* Actions */}
                 <div className="pt-2 space-y-2">

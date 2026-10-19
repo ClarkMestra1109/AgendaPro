@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, Share2, QrCode, ExternalLink } from 'lucide-react';
+import { X, Copy, Check, Share2, ExternalLink } from 'lucide-react';
 
 interface SharePublicLinkModalProps {
   isOpen: boolean;
@@ -13,7 +13,7 @@ export const SharePublicLinkModal: React.FC<SharePublicLinkModalProps> = ({
   onOpenClientView,
 }) => {
   const [copied, setCopied] = useState(false);
-  const linkUrl = 'https://agendapro.app/lauramorales-studio';
+  const linkUrl = typeof window !== 'undefined' ? window.location.origin : ''; 
 
   if (!isOpen) return null;
 
@@ -25,7 +25,7 @@ export const SharePublicLinkModal: React.FC<SharePublicLinkModalProps> = ({
 
   const handleWhatsApp = () => {
     const text = encodeURIComponent(
-      `¡Hola! Reserva tu cita conmigo en Laura Morales Studio a través de mi agenda online: ${linkUrl}`
+      `Consulta los servicios y horarios que publiqué en AgendaPro: ${linkUrl}`
     );
     window.open(`https://wa.me/?text=${text}`, '_blank');
   };
@@ -49,53 +49,12 @@ export const SharePublicLinkModal: React.FC<SharePublicLinkModalProps> = ({
             Enlace Público de Reserva
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Tus clientes pueden ingresar aquí para ver tus servicios y cupos en tiempo real
+            Vista previa local del prototipo. El enlace no publica una agenda externa ni sincroniza datos con un servidor.
           </p>
         </div>
 
-        {/* QR Code preview */}
-        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 inline-block mx-auto">
-          <div className="w-36 h-36 bg-white p-2 rounded-xl border border-slate-200 flex items-center justify-center shadow-xs">
-            {/* Clean SVG QR code representation */}
-            <svg viewBox="0 0 100 100" className="w-full h-full text-slate-900">
-              <rect width="100" height="100" fill="white" />
-              {/* Corners */}
-              <rect x="10" y="10" width="25" height="25" fill="#0b1c30" rx="3" />
-              <rect x="15" y="15" width="15" height="15" fill="white" rx="1.5" />
-              <rect x="18" y="18" width="9" height="9" fill="#1d4ed8" rx="1" />
-
-              <rect x="65" y="10" width="25" height="25" fill="#0b1c30" rx="3" />
-              <rect x="70" y="15" width="15" height="15" fill="white" rx="1.5" />
-              <rect x="73" y="18" width="9" height="9" fill="#1d4ed8" rx="1" />
-
-              <rect x="10" y="65" width="25" height="25" fill="#0b1c30" rx="3" />
-              <rect x="15" y="70" width="15" height="15" fill="white" rx="1.5" />
-              <rect x="18" y="73" width="9" height="9" fill="#1d4ed8" rx="1" />
-
-              {/* Data matrix dots */}
-              <rect x="42" y="12" width="6" height="6" fill="#0b1c30" rx="1" />
-              <rect x="52" y="12" width="6" height="6" fill="#0b1c30" rx="1" />
-              <rect x="42" y="24" width="6" height="6" fill="#0b1c30" rx="1" />
-              <rect x="47" y="34" width="6" height="6" fill="#1d4ed8" rx="1" />
-
-              <rect x="12" y="44" width="6" height="6" fill="#0b1c30" rx="1" />
-              <rect x="24" y="44" width="6" height="6" fill="#0b1c30" rx="1" />
-              <rect x="34" y="44" width="6" height="6" fill="#0b1c30" rx="1" />
-              <rect x="44" y="44" width="12" height="12" fill="#1d4ed8" rx="2" />
-              <rect x="64" y="44" width="6" height="6" fill="#0b1c30" rx="1" />
-              <rect x="78" y="44" width="10" height="6" fill="#0b1c30" rx="1" />
-
-              <rect x="44" y="64" width="8" height="8" fill="#0b1c30" rx="1" />
-              <rect x="58" y="64" width="8" height="8" fill="#0b1c30" rx="1" />
-              <rect x="72" y="64" width="8" height="8" fill="#0b1c30" rx="1" />
-              <rect x="84" y="74" width="6" height="16" fill="#0b1c30" rx="1" />
-              <rect x="44" y="80" width="16" height="8" fill="#0b1c30" rx="1" />
-              <rect x="66" y="80" width="10" height="8" fill="#1d4ed8" rx="1" />
-            </svg>
-          </div>
-          <span className="text-[10px] text-slate-400 mt-2 block font-medium">
-            Escanea para reservar en tu teléfono
-          </span>
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-xs text-slate-500">
+          El código QR y el enlace público estarán disponibles cuando se integre la publicación de agendas.
         </div>
 
         {/* URL Input */}

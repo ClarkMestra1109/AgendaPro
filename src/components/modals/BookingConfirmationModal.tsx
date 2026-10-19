@@ -26,14 +26,16 @@ export const BookingConfirmationModal: React.FC<BookingConfirmationModalProps> =
         </button>
 
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm border border-emerald-100">
+          <div className={`w-14 h-14 rounded-2xl ${booking.status === 'confirmed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'} flex items-center justify-center mx-auto shadow-sm border`}>
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <h3 className="text-xl font-extrabold text-[#0b1c30] tracking-tight font-display">
-            ¡Reserva Confirmada!
+            {booking.status === 'confirmed' ? '¡Reserva Confirmada!' : '¡Solicitud enviada!'}
           </h3>
           <p className="text-xs text-slate-500">
-            Tu cita ha sido agendada y registrada en el sistema de AgendaPro.
+            {booking.status === 'confirmed'
+              ? 'Tu cita ha sido confirmada por el proveedor.'
+              : 'Tu solicitud quedó registrada y está pendiente de confirmación por el proveedor.'}
           </p>
         </div>
 

@@ -5,7 +5,6 @@ import {
   Calendar,
   Plus,
   Bell,
-  Check,
   Briefcase,
   Clock,
   Ban,
@@ -22,6 +21,8 @@ interface HeaderProps {
   onOpenNewService: () => void;
   onOpenNewSlot: () => void;
   onOpenShareModal: () => void;
+  currentUserName: string;
+  currentUserEmail: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,6 +33,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewService,
   onOpenNewSlot,
   onOpenShareModal,
+  currentUserName,
+  currentUserEmail,
 }) => {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -69,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Date Display */}
         <div className="hidden lg:flex items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/70">
           <Calendar className="w-3.5 h-3.5 text-blue-600" />
-          <span>Miércoles, 24 Octubre 2024</span>
+          <span>{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
         </div>
 
         {/* Share Public Link Button (Provider mode) */}
@@ -142,71 +145,40 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'bg-indigo-50/70 border-indigo-200 text-indigo-800 hover:bg-indigo-100'
               : 'bg-emerald-50/70 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
           }`}
-          title="Alternar entre modo Proveedor y modo Cliente"
+          title="Cerrar sesión para entrar con otra cuenta"
         >
           <ArrowLeftRight className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">
-            {role === 'provider' ? 'Ver como Cliente' : 'Ver como Proveedor'}
-          </span>
-          <span className="sm:hidden">{role === 'provider' ? 'Cliente' : 'Proveedor'}</span>
+          <span className="hidden sm:inline">Salir / Cambiar cuenta</span>
+          <span className="sm:hidden">Salir</span>
         </button>
 
-        {/* Notifications */}
+        {/* Notifications: el prototipo todavía no tiene un servicio de notificaciones */}
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
             className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
             title="Notificaciones"
+            aria-expanded={showNotifications}
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-blue-600 ring-2 ring-white"></span>
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 animate-in fade-in slide-in-from-top-1">
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-                <span className="text-xs font-bold text-slate-800">Notificaciones Recientes</span>
-                <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                  3 nuevas
-                </span>
-              </div>
-              <div className="space-y-2">
-                <div className="p-2 bg-blue-50/50 rounded-xl text-left text-xs border border-blue-100/50">
-                  <p className="font-semibold text-slate-800">Nueva reserva solicitada</p>
-                  <p className="text-[11px] text-slate-500">Carlos Gómez ha solicitado Corte de Barbería para hoy 10:00 AM.</p>
-                  <span className="text-[10px] text-blue-700 font-medium mt-1 inline-block">Hace 12 min</span>
-                </div>
-                <div className="p-2 bg-slate-50 rounded-xl text-left text-xs border border-slate-100">
-                  <p className="font-semibold text-slate-800">Recordatorio automático enviado</p>
-                  <p className="text-[11px] text-slate-500">Notificación SMS enviada a Mariana Restrepo (Meet 02:30 PM).</p>
-                  <span className="text-[10px] text-slate-400 font-medium mt-1 inline-block">Hace 1 hora</span>
-                </div>
-              </div>
+            <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 z-50">
+              <div className="text-xs font-bold text-slate-800 mb-2">Notificaciones</div>
+              <p className="text-xs text-slate-500">No hay notificaciones disponibles en este prototipo.</p>
             </div>
           )}
         </div>
 
-        {/* User Avatar with status */}
+        {/* User profile */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
-          <div className="relative">
-            <img
-              src={
-                role === 'provider'
-                  ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuC01S9TmngYbMx1mcz1769UTr0MwfdANXcck-mr_a1Aky0nR-UOZpZIBD8QP316pQqWVSJVPCEKbsZIWVWBoqAl1IJOLpSB3shCG2Z9ta8dgVJbfTd5Vya-qoOl2Pc6CfyIpLI_CJSYdsXf8MAFzBtstqUjSZIR4bJXsscMm4YNhIMpiVnWTv3bDmrwkADMfgOwRYn1eCKQSHefjoxh0N0zD-IPnuE427de4wwSgFq9ePhQVf_Fu_Q5dQ'
-                  : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
-              }
-              alt="Profile"
-              className="w-8 h-8 rounded-full object-cover ring-2 ring-blue-100"
-            />
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-extrabold ring-2 ring-blue-50">
+            {currentUserName.trim().split(/\s+/).slice(0, 2).map((parte) => parte[0]?.toUpperCase() || '').join('')}
           </div>
-          <div className="hidden md:block text-left leading-tight">
-            <p className="text-xs font-bold text-slate-800">
-              {role === 'provider' ? 'Laura Morales' : 'Carlos Mendoza'}
-            </p>
-            <p className="text-[10px] font-semibold text-blue-700">
-              {role === 'provider' ? 'Proveedor · Negocio' : 'Cliente VIP'}
-            </p>
+          <div className="hidden md:block text-left leading-tight max-w-40">
+            <p className="text-xs font-bold text-slate-800 truncate">{currentUserName}</p>
+            <p className="text-[10px] font-semibold text-slate-500 truncate">{currentUserEmail}</p>
           </div>
         </div>
       </div>

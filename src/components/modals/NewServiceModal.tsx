@@ -19,8 +19,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Barbería & Belleza');
-  const [price, setPrice] = useState('35000');
-  const [duration, setDuration] = useState('45');
+  const [price, setPrice] = useState('');
+  const [duration, setDuration] = useState('');
   const [modality, setModality] = useState('Presencial');
   const [description, setDescription] = useState('');
 
@@ -39,8 +39,8 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       // Limpiar el formulario cuando se crea un servicio nuevo
       setTitle('');
       setCategory('Barbería & Belleza');
-      setPrice('35000');
-      setDuration('45');
+      setPrice('');
+      setDuration('');
       setModality('Presencial');
       setDescription('');
     }
@@ -64,7 +64,7 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!title.trim()) return;
+    if (!title.trim() || Number(price) <= 0 || Number(duration) <= 0) return;
 
     if (isEditing && editingService) {
       // Actualizar servicio existente
@@ -74,11 +74,10 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
         category,
         categorySlug: getCategorySlug(category),
         modalityBadge: modality,
-        price: parseInt(price) || 30000,
-        durationMinutes: parseInt(duration) || 45,
+        price: Number(price),
+        durationMinutes: Number(duration),
         description:
-          description.trim() ||
-          'Servicio profesional con atención personalizada en Bogotá.',
+          description.trim(),
       };
 
       onUpdateService?.(updatedService);
@@ -92,18 +91,16 @@ export const NewServiceModal: React.FC<NewServiceModalProps> = ({
       title: title.trim(),
       category,
       categorySlug: getCategorySlug(category),
-      providerName: 'Laura Morales',
-      providerStudio: 'Laura Morales Studio • Bogotá Chicó Norte',
+      providerName: '',
+      providerStudio: '',
       modalityBadge: modality,
-      price: parseInt(price) || 30000,
-      durationMinutes: parseInt(duration) || 45,
-      rating: 5.0,
-      reviewsCount: 1,
-      imageUrl:
-        'https://lh3.googleusercontent.com/aida-public/AB6AXuCOOA4gaFcqrI965s1tf5LyjFUANtEEFp4-KGEuqZHbsEGF_nu8UvauZ1kFm2Twj4Co7xIS9sT5gUAHOEEdAlesZ3EpZvZazr4Krh6O3dOv4PAwRtp6Eddz4eUvRJYnBseZVI7dY95Tv2tuVhinyvVQnRNWSFjP_LrNw030jAIjgfwkPn90fCPbLzvF8vALQEW9M--fYVksOXEtpcIONwzrn9TZDKaHn5WEaW3_DCH6FugcybBjHiYXRA',
+      price: Number(price),
+      durationMinutes: Number(duration),
+      rating: 0,
+      reviewsCount: 0,
+      imageUrl: '',
       description:
-        description.trim() ||
-        'Servicio profesional con atención personalizada en Bogotá.',
+        description.trim(),
       isActive: true,
     };
 

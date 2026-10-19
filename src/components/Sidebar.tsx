@@ -9,11 +9,8 @@ import {
   Compass,
   BookmarkCheck,
   LogOut,
-  Sparkles,
   ArrowLeftRight,
   ShieldCheck,
-  CheckCircle2,
-  PhoneCall
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -25,6 +22,9 @@ interface SidebarProps {
   pendingBookingsCount: number;
   activeClientBookingsCount: number;
   servicesCount: number;
+  availableSlotsCount: number;
+  currentUserName: string;
+  currentUserEmail: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -36,6 +36,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pendingBookingsCount,
   activeClientBookingsCount,
   servicesCount,
+  availableSlotsCount,
+  currentUserName,
+  currentUserEmail,
 }) => {
   return (
     <aside
@@ -64,16 +67,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${role === 'provider' ? 'bg-indigo-600' : 'bg-emerald-600'}`}></span>
             <span className="text-xs font-bold text-slate-700">
-              {role === 'provider' ? 'Laura Morales' : 'Carlos Mendoza'}
+              {currentUserName}
             </span>
           </div>
           <button
             onClick={onSwitchRole}
-            title="Cambiar entre Proveedor y Cliente"
+            title="Cerrar sesión para entrar con otra cuenta"
             className="text-[11px] font-semibold text-blue-700 bg-white hover:bg-blue-100/80 px-2 py-0.5 rounded-lg border border-blue-200 transition-colors flex items-center gap-1 shadow-xs"
           >
             <ArrowLeftRight className="w-3 h-3" />
-            Cambiar
+            Salir
           </button>
         </div>
 
@@ -132,7 +135,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                   currentView === 'provider-availability' ? 'bg-blue-800 text-blue-100' : 'bg-emerald-100 text-emerald-700'
                 }`}>
-                  18 libres
+                  {availableSlotsCount} libres
                 </span>
               </button>
 
@@ -242,47 +245,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="text-[10px] font-bold tracking-wider text-blue-700 uppercase bg-blue-50 px-2 py-0.5 rounded-md">
                 PLAN PROFESIONAL
               </span>
-              <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                Sincronizado
-              </span>
+              <span className="text-[11px] font-semibold text-slate-500">Prototipo</span>
             </div>
             <p className="text-xs font-semibold text-slate-800 mt-1.5 truncate">
-              Laura Morales Studio
+              {currentUserName}
             </p>
             <p className="text-[11px] text-slate-500">
-              Sincronización activa con Google Calendar
+              Datos guardados en este navegador
             </p>
           </div>
         ) : (
           <div className="bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs">
             <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              <span>Soporte VIP 24/7</span>
+              <span>Perfil de cliente</span>
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
-              Atención preferente y garantía en todas tus citas.
+              Consulta los servicios y horarios que publiquen los proveedores.
             </p>
           </div>
         )}
 
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-2.5">
-            <img
-              src={
-                role === 'provider'
-                  ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuC01S9TmngYbMx1mcz1769UTr0MwfdANXcck-mr_a1Aky0nR-UOZpZIBD8QP316pQqWVSJVPCEKbsZIWVWBoqAl1IJOLpSB3shCG2Z9ta8dgVJbfTd5Vya-qoOl2Pc6CfyIpLI_CJSYdsXf8MAFzBtstqUjSZIR4bJXsscMm4YNhIMpiVnWTv3bDmrwkADMfgOwRYn1eCKQSHefjoxh0N0zD-IPnuE427de4wwSgFq9ePhQVf_Fu_Q5dQ'
-                  : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80'
-              }
-              alt="Avatar"
-              className="w-8 h-8 rounded-full object-cover border border-slate-200"
-            />
+            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-800 flex items-center justify-center text-xs font-extrabold border border-slate-200">
+              {currentUserName.trim().split(/\s+/).slice(0, 2).map((parte) => parte[0]?.toUpperCase() || '').join('')}
+            </div>
             <div className="text-left leading-tight">
               <p className="text-xs font-bold text-slate-800">
-                {role === 'provider' ? 'Laura Morales' : 'Carlos Mendoza'}
+                {currentUserName}
               </p>
               <p className="text-[10px] text-slate-500">
-                {role === 'provider' ? 'laura.morales@agendapro.co' : 'carlos.m@email.com'}
+                {currentUserEmail}
               </p>
             </div>
           </div>

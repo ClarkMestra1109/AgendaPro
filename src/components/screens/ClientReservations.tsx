@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Video,
-  FileText,
   ChevronRight,
   ArrowRight,
   RotateCcw,
@@ -37,35 +36,7 @@ export const ClientReservations: React.FC<ClientReservationsProps> = ({
   );
   const cancelledBookings = bookings.filter((b) => b.status === 'cancelled');
 
-  const pastBookings = [
-    {
-      id: 'AP-8772',
-      service: 'Entrenamiento Personalizado Funcional',
-      provider: 'Coach Valentina',
-      date: '18 Octubre 2024',
-      price: '$35.000 COP',
-      status: 'Completada',
-      rating: '5★ Calificado',
-    },
-    {
-      id: 'AP-8740',
-      service: 'Mantenimiento Preventivo Portátil',
-      provider: 'Felipe Mendoza',
-      date: '12 Octubre 2024',
-      price: '$75.000 COP',
-      status: 'Completada',
-      rating: '5★ Calificado',
-    },
-    {
-      id: 'AP-8711',
-      service: 'Corte Clásico & Barba',
-      provider: 'Laura Morales Studio',
-      date: '28 Septiembre 2024',
-      price: '$25.000 COP',
-      status: 'Completada',
-      rating: '5★ Calificado',
-    },
-  ];
+  const pastBookings = bookings.filter((booking) => booking.status === 'completed');
 
   return (
     <div className="space-y-6">
@@ -278,27 +249,22 @@ export const ClientReservations: React.FC<ClientReservationsProps> = ({
               {pastBookings.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50/60">
                   <td className="py-3.5 px-4">
-                    <div className="font-bold text-slate-900">{item.service}</div>
-                    <div className="text-[11px] text-slate-400">{item.provider}</div>
+                    <div className="font-bold text-slate-900">{item.serviceTitle}</div>
+                    <div className="text-[11px] text-slate-400">{item.locationName}</div>
                   </td>
                   <td className="py-3.5 px-4 text-slate-600">{item.date}</td>
-                  <td className="py-3.5 px-4 font-bold text-slate-800">{item.price}</td>
+                  <td className="py-3.5 px-4 font-bold text-slate-800">${item.price.toLocaleString('es-CO')} COP</td>
                   <td className="py-3.5 px-4">
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      ✓ {item.status}
+                      <CheckCircle2 className="w-3 h-3" /> Completada
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 text-right">
-                    <button
-                      onClick={() => alert(`Descargando comprobante fiscal ${item.id}.pdf`)}
-                      className="text-xs font-bold text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>PDF</span>
-                    </button>
-                  </td>
+                  <td className="py-3.5 px-4 text-right text-xs text-slate-400">No disponible</td>
                 </tr>
               ))}
+              {pastBookings.length === 0 && (
+                <tr><td colSpan={5} className="py-8 px-4 text-center text-xs text-slate-500">Todavía no tienes servicios completados.</td></tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -17,6 +17,10 @@ export type BookingStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';
 export interface Booking {
   id: string;
   clientName: string;
+  providerEmail?: string;
+  dateISO?: string;
+  startTime?: string;
+  availabilitySlotId?: string;
   clientEmail: string;
   clientPhone: string;
   clientInitials: string;
@@ -43,6 +47,7 @@ export interface ServiceItem {
   category: string;
   categorySlug: string;
   providerName: string;
+  providerEmail?: string;
   providerStudio: string;
   modalityBadge: string;
   price: number;
@@ -56,8 +61,13 @@ export interface ServiceItem {
 
 export interface AvailabilitySlot {
   id: string;
-  dayLabel: 'HOY' | 'MAÑ' | 'VIE' | 'SÁB' | 'DOM';
+  dayLabel: string;
   fullDate: string;
+  dateISO?: string;
+  startTime?: string;
+  endTime?: string;
+  durationMinutes?: number;
+  providerEmail?: string;
   timeRange: string;
   capacityText: string;
   serviceTag: string;
@@ -69,7 +79,7 @@ export interface CalendarEvent {
   title: string;
   client: string;
   timeRange: string;
-  day: 'Lun 24' | 'Mar 25' | 'Hoy Mié 26' | 'Jue 27';
+  day: string;
   startHour: number; // e.g. 10.0 for 10:00 AM, 14.5 for 2:30 PM
   durationHours: number; // e.g. 0.75, 1, 2
   status: 'confirmed' | 'pending' | 'available' | 'blocked';

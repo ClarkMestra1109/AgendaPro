@@ -13,7 +13,7 @@ export const CancelBookingModal: React.FC<CancelBookingModalProps> = ({
   onClose,
   onConfirmCancel,
 }) => {
-  const [reason, setReason] = useState('Cambio imprevisto de itinerario');
+  const [reason, setReason] = useState('');
 
   if (!booking) return null;
 
