@@ -46,14 +46,14 @@ export const ClientExploreServicesView: React.FC<ClientExploreServicesViewProps>
     return services.filter((s) => {
       const matchesSearch =
         s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.subtitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.description.toLowerCase().includes(searchQuery.toLowerCase());
+        (s.subtitle ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (s.description ?? '').toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesCategory =
         selectedCategory === 'Todas' || s.category === selectedCategory;
 
       const matchesModality =
-        selectedModality === 'Todas' || s.modality.includes(selectedModality);
+        selectedModality === 'Todas' || (s.modality ?? '').includes(selectedModality);
 
       return matchesSearch && matchesCategory && matchesModality;
     });
@@ -204,7 +204,7 @@ export const ClientExploreServicesView: React.FC<ClientExploreServicesViewProps>
 
                 {/* Floating price badge bottom right */}
                 <div className="absolute bottom-3 right-3 bg-[#1E3A8A] text-white text-xs font-extrabold px-3 py-1 rounded-md shadow-md tabular-nums">
-                  ${service.priceCOP.toLocaleString('es-CO')} COP
+                  ${(service.priceCOP ?? 0).toLocaleString('es-CO')} COP
                 </div>
               </div>
 

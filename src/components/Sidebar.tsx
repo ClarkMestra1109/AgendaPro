@@ -11,6 +11,9 @@ import {
   LogOut,
   ArrowLeftRight,
   ShieldCheck,
+  CheckCircle2,
+  PhoneCall,
+  UserRound,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -234,6 +237,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             </>
           )}
+              <button
+                id="nav-client-profile"
+                onClick={() => onNavigate('client-profile')}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  currentView === 'client-profile'
+                    ? 'bg-blue-700 text-white font-semibold shadow-sm shadow-blue-700/20'
+                    : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span>👤</span>
+                  <span>Mi perfil</span>
+                </div>
+              </button>
         </nav>
       </div>
 

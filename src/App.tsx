@@ -20,13 +20,16 @@ import { ClientDashboard } from './components/screens/ClientDashboard';
 import { ClientExplore } from './components/screens/ClientExplore';
 import { ClientBooking } from './components/screens/ClientBooking';
 import { ClientReservations } from './components/screens/ClientReservations';
+import { ClientProfile,
+  type ClientProfileData,
+} from './components/screens/ClientProfile';
 import { BookingConfirmationModal } from './components/modals/BookingConfirmationModal';
 import { CancelBookingModal } from './components/modals/CancelBookingModal';
 import { NewServiceModal } from './components/modals/NewServiceModal';
 import { NewSlotModal } from './components/modals/NewSlotModal';
 import { SharePublicLinkModal } from './components/modals/SharePublicLinkModal';
 import { RescheduleBookingModal } from './components/modals/RescheduleBookingModal';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react'
 
 function leerListaGuardada<T>(clave: string): T[] {
   try {
@@ -50,6 +53,24 @@ export function App() {
   const [slots, setSlots] = useState<AvailabilitySlot[]>(() => leerListaGuardada<AvailabilitySlot>('agendapro_slots_v2'));
   const [calendarEvents] = useState<CalendarEvent[]>([]);
   const [selectedServiceToBook, setSelectedServiceToBook] = useState<ServiceItem | null>(null);
+
+  const [clientProfile, setClientProfile] = useState<ClientProfileData>(() => {
+    const saved = localStorage.getItem('agendapro_client_profile');
+
+    if (saved) {
+      try {
+        return JSON.parse(saved) as ClientProfileData;
+      } catch {
+        localStorage.removeItem('agendapro_client_profile');
+      }
+    }
+
+    return {
+      name: 'Carlos Mendoza',
+      phone: '+57 300 123 4567',
+      email: 'carlos.mendoza@example.com',
+    };
+  });
 
   // Estados de Modales
 const [confirmedBookingForModal, setConfirmedBookingForModal] = useState<Booking | null>(null);
@@ -102,31 +123,59 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     localStorage.setItem('agendapro_slots_v2', JSON.stringify(slots));
   }, [slots]);
 
+
   const entrarConCuenta = (usuario: AuthenticatedUser) => {
     setCurrentUser(usuario);
     setRole(usuario.role);
     setSelectedServiceToBook(null);
     setCurrentView(usuario.role === 'provider' ? 'provider-dashboard' : 'client-dashboard');
     showToast(`Bienvenido/a, ${usuario.name}.`);
-  };
 
+ };
+
+  useEffect(() => {
+    localStorage.setItem(
+      'agendapro_client_profile',
+      JSON.stringify(clientProfile)
+    );
+  }, [clientProfile]);
+
+  // Cambios de rol y login
+  const handleSwitchRole = () => {
+    if (role === 'provider') {
+      setRole('client');
+      setCurrentView('client-dashboard');
+      showToast('Cambiado a Modo Cliente VIP (Carlos Mendoza)');
+    } else {
+      setRole('provider');
+      setCurrentView('provider-dashboard');
+      showToast('Cambiado a Modo Proveedor (Laura Morales)');
+    }
+  };
   const handleLogin = async (email: string, password: string) => {
     const resultado = await authenticateAccount(email, password);
-    if (resultado.success && resultado.user) entrarConCuenta(resultado.user);
+    if (resultado.success && resultado.user) {
+      entrarConCuenta(resultado.user);
+    }
     return resultado;
   };
 
-  const handleRegister = async (name: string, email: string, password: string, selectedRole: UserRole) => {
-    const resultado = await registerAccount(name, email, password, selectedRole);
-    if (resultado.success && resultado.user) entrarConCuenta(resultado.user);
+  const handleRegister = async (
+    name: string,
+    email: string,
+    password: string,
+    selectedRole: UserRole
+  ) => {
+    const resultado = await registerAccount(
+      name,
+      email,
+      password,
+      selectedRole
+    );
+    if (resultado.success && resultado.user) {
+      entrarConCuenta(resultado.user);
+    }
     return resultado;
-  };
-
-  const handleSwitchRole = () => {
-    setCurrentUser(null);
-    setSelectedServiceToBook(null);
-    setCurrentView('login');
-    showToast('Inicia sesión con una cuenta del otro rol para cambiar de perfil.');
   };
 
   const handleLogout = () => {
@@ -286,12 +335,16 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     showToast(`Servicio "${service?.title}" eliminado del catálogo.`);
   };
 
-  // Cada rol ve sus propias reservas. Los servicios y horarios publicados son compartidos en el catálogo.
+// Cada rol ve sus propias reservas. Los servicios y horarios publicados son compartidos en el catálogo.
   const reservasProveedor = currentUser
     ? bookings.filter((booking) => booking.providerEmail === currentUser.email)
     : [];
   const reservasCliente = currentUser
-    ? bookings.filter((booking) => booking.clientEmail.trim().toLowerCase() === currentUser.email.toLowerCase())
+    ? bookings.filter(
+        (booking) =>
+          booking.clientEmail.trim().toLowerCase() ===
+          currentUser.email.toLowerCase()
+      )
     : [];
   const serviciosProveedor = currentUser
     ? services.filter((service) => service.providerEmail === currentUser.email)
@@ -300,8 +353,21 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     ? slots.filter((slot) => slot.providerEmail === currentUser.email)
     : [];
   const serviciosPublicos = services.filter((service) => service.isActive);
-  const pendingBookingsCount = reservasProveedor.filter((booking) => booking.status === 'pending').length;
-  const activeClientBookingsCount = reservasCliente.filter((booking) => booking.status === 'confirmed' || booking.status === 'pending').length;
+
+  const handleSaveClientProfile = (updatedProfile: ClientProfileData) => {
+    setClientProfile(updatedProfile);
+    showToast('Perfil actualizado correctamente.');
+  };
+
+  // Contadores
+  const pendingBookingsCount = reservasProveedor.filter(
+    (booking) => booking.status === 'pending'
+  ).length;
+
+  const activeClientBookingsCount = reservasCliente.filter(
+    (booking) => booking.status === 'confirmed' || booking.status === 'pending'
+  ).length;
+
   return (
     <div className="min-h-screen bg-[#f8faff] text-[#0b1c30] flex flex-col selection:bg-blue-100 selection:text-blue-900 font-sans">
       {/* Notificación flotante (Toast) */}
@@ -461,6 +527,13 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                   onNavigate={(view) => setCurrentView(view)}
                   onCancelBooking={handleCancelBooking}
                   onRescheduleBooking={(booking) => setBookingToReschedule(booking)}
+                />
+              )}
+
+              {currentView === 'client-profile' && role === 'client' && (
+                <ClientProfile
+                  profile={clientProfile}
+                  onSave={handleSaveClientProfile}
                 />
               )}
             </main>

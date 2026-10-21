@@ -201,7 +201,7 @@ export const ClientBookingsView: React.FC<ClientBookingsViewProps> = ({
                       </span>
                       <span>·</span>
                       <span className="font-bold text-blue-700 tabular-nums">
-                        ${b.priceCOP.toLocaleString('es-CO')} COP
+                        ${(b.priceCOP ?? 0).toLocaleString('es-CO')} COP
                       </span>
                       <span>·</span>
                       <span>Modalidad {b.modality}</span>
@@ -314,7 +314,7 @@ export const ClientBookingsView: React.FC<ClientBookingsViewProps> = ({
                         {row.modality}
                       </td>
                       <td className="py-3.5 px-3 text-right font-bold text-slate-800 tabular-nums">
-                        ${row.priceCOP.toLocaleString('es-CO')} COP
+                        ${(row.priceCOP ?? 0).toLocaleString('es-CO')} COP
                       </td>
                       <td className="py-3.5 px-3">
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
@@ -368,7 +368,7 @@ export const ClientBookingsView: React.FC<ClientBookingsViewProps> = ({
                   <div className="text-slate-500">{b.providerName} · {b.dateDisplay}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold text-blue-700 tabular-nums">${b.priceCOP.toLocaleString('es-CO')} COP</div>
+                  <div className="font-bold text-blue-700 tabular-nums">${(b.priceCOP ?? 0).toLocaleString('es-CO')} COP</div>
                   <button
                     onClick={() => onRebook(b)}
                     className="text-blue-600 font-semibold hover:underline mt-1"
