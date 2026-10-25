@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { AuthenticatedUser, authenticateAccount, registerAccount } from './data/authStorage';
+import React, { useEffect, useState } from 'react';
+import { AuthenticatedUser, authenticateAccount, cerrarSesion, registerAccount } from './data/authStorage';
 import {
   UserRole,
   CurrentView,
@@ -20,70 +20,105 @@ import { ClientDashboard } from './components/screens/ClientDashboard';
 import { ClientExplore } from './components/screens/ClientExplore';
 import { ClientBooking } from './components/screens/ClientBooking';
 import { ClientReservations } from './components/screens/ClientReservations';
-import { ClientProfile,
-  type ClientProfileData,
-} from './components/screens/ClientProfile';
+import { ClientProfile, type ClientProfileData } from './components/screens/ClientProfile';
 import { BookingConfirmationModal } from './components/modals/BookingConfirmationModal';
 import { CancelBookingModal } from './components/modals/CancelBookingModal';
-import { NewServiceModal } from './components/modals/NewServiceModal';
-import { NewSlotModal } from './components/modals/NewSlotModal';
+import { NewServiceModal, type NuevoServicioPayload } from './components/modals/NewServiceModal';
+import { NewSlotModal, type NuevaFranjaPayload } from './components/modals/NewSlotModal';
 import { SharePublicLinkModal } from './components/modals/SharePublicLinkModal';
 import { RescheduleBookingModal } from './components/modals/RescheduleBookingModal';
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Loader2 } from 'lucide-react';
+import {
+  UsuarioResponse,
+  actualizarPerfil,
+  actualizarServicio,
+  catalogoFranjasDeServicio,
+  catalogoServicios,
+  clearToken,
+  crearReserva,
+  crearServicio,
+  eliminarServicio,
+  getMiPerfil,
+  getToken,
+  listarFranjasDeServicioPropio,
+  mensajeDeApiError,
+  miAgenda,
+  misServicios,
+  publicarFranja,
+  publicarFranjaRecurrente,
+  cancelarReserva,
+  reprogramarReserva,
+  retirarFranja,
+} from './lib/api';
+import {
+  catalogoAServiceItem,
+  franjaASlot,
+  reservaABooking,
+  servicioPropioAServiceItem,
+  usuarioAAuthenticatedUser,
+} from './lib/adapters';
 
-function leerListaGuardada<T>(clave: string): T[] {
-  try {
-    const guardado = localStorage.getItem(clave);
-    if (!guardado) return [];
-    const datos: unknown = JSON.parse(guardado);
-    return Array.isArray(datos) ? (datos as T[]) : [];
-  } catch {
-    return [];
+const DIAS_JAVA = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+const ABREVIATURAS_DIA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+function construirEventosAgenda(bookings: Booking[]): CalendarEvent[] {
+  const hoy = new Date();
+  const desplazamientoLunes = (hoy.getDay() + 6) % 7;
+  const inicioSemana = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - desplazamientoLunes);
+  const etiquetasPorFecha = new Map<string, string>();
+  for (let i = 0; i < 4; i += 1) {
+    const fecha = new Date(inicioSemana);
+    fecha.setDate(inicioSemana.getDate() + i);
+    const esHoy = fecha.toDateString() === hoy.toDateString();
+    const claveISO = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+    etiquetasPorFecha.set(claveISO, `${esHoy ? 'Hoy ' : ''}${ABREVIATURAS_DIA[fecha.getDay()]} ${fecha.getDate()}`);
   }
+
+  return bookings
+    .filter((b) => b.status === 'confirmed' && b.dateISO && etiquetasPorFecha.has(b.dateISO))
+    .map((b) => {
+      const [horas, minutos] = (b.startTime || '00:00').split(':').map(Number);
+      return {
+        id: b.id,
+        title: b.serviceTitle,
+        client: b.clientName,
+        timeRange: b.time,
+        day: etiquetasPorFecha.get(b.dateISO!) as string,
+        startHour: horas + minutos / 60,
+        durationHours: b.durationMinutes / 60,
+        status: 'confirmed' as const,
+        color: 'bg-emerald-100 border-emerald-500 text-emerald-900',
+        price: `$${b.price.toLocaleString('es-CO')} COP`,
+        location: b.locationName,
+      };
+    });
 }
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
   const [role, setRole] = useState<UserRole>('client');
   const [currentView, setCurrentView] = useState<CurrentView>('login');
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
 
-  // Los arreglos empiezan vacíos: ya no se importan reservas, servicios ni horarios de demostración.
-  const [bookings, setBookings] = useState<Booking[]>(() => leerListaGuardada<Booking>('agendapro_bookings_v2'));
-  const [services, setServices] = useState<ServiceItem[]>(() => leerListaGuardada<ServiceItem>('agendapro_services_v2'));
-  const [slots, setSlots] = useState<AvailabilitySlot[]>(() => leerListaGuardada<AvailabilitySlot>('agendapro_slots_v2'));
-  const [calendarEvents] = useState<CalendarEvent[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [clientBookingSlots, setClientBookingSlots] = useState<AvailabilitySlot[]>([]);
+  const [rescheduleSlots, setRescheduleSlots] = useState<AvailabilitySlot[]>([]);
   const [selectedServiceToBook, setSelectedServiceToBook] = useState<ServiceItem | null>(null);
 
-  const [clientProfile, setClientProfile] = useState<ClientProfileData>(() => {
-    const saved = localStorage.getItem('agendapro_client_profile');
+  const [clientProfile, setClientProfile] = useState<ClientProfileData>({ name: '', phone: '', email: '' });
 
-    if (saved) {
-      try {
-        return JSON.parse(saved) as ClientProfileData;
-      } catch {
-        localStorage.removeItem('agendapro_client_profile');
-      }
-    }
+  const [confirmedBookingForModal, setConfirmedBookingForModal] = useState<Booking | null>(null);
+  const [bookingToCancel, setBookingToCancel] = useState<Booking | null>(null);
+  const [bookingToReschedule, setBookingToReschedule] = useState<Booking | null>(null);
 
-    return {
-      name: 'Carlos Mendoza',
-      phone: '+57 300 123 4567',
-      email: 'carlos.mendoza@example.com',
-    };
-  });
+  const [isNewServiceOpen, setIsNewServiceOpen] = useState(false);
+  const [editingService, setEditingService] = useState<ServiceItem | null>(null);
 
-  // Estados de Modales
-const [confirmedBookingForModal, setConfirmedBookingForModal] = useState<Booking | null>(null);
-const [bookingToCancel, setBookingToCancel] = useState<Booking | null>(null);
-const [bookingToReschedule, setBookingToReschedule] = useState<Booking | null>(null);
+  const [isNewSlotOpen, setIsNewSlotOpen] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-const [isNewServiceOpen, setIsNewServiceOpen] = useState(false);
-const [editingService, setEditingService] = useState<ServiceItem | null>(null);
-
-const [isNewSlotOpen, setIsNewSlotOpen] = useState(false);
-const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-
-  // Notificaciones Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -91,299 +126,369 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Limpiar una sola vez las claves antiguas que contenían los datos de demostración.
-  useEffect(() => {
-    const claveLimpieza = 'agendapro_demo_data_removed_v1';
-    if (localStorage.getItem(claveLimpieza) !== 'true') {
-      [
-        'agendapro_role',
-        'agendapro_bookings',
-        'agendapro_services',
-        'agendapro_slots',
-        'agendapro_events',
-        'agendapro_users',
-        'agendapro_accounts',
-        'agendapro_accounts_v1',
-      ].forEach((clave) => localStorage.removeItem(clave));
-      localStorage.setItem(claveLimpieza, 'true');
-    }
-  }, []);
+  const aplicarPerfil = (perfil: UsuarioResponse) => {
+    setClientProfile({ name: perfil.nombre, phone: perfil.telefono || '', email: perfil.correo });
+  };
 
-  // Persistencia local del prototipo. Servicios y horarios publicados son visibles en el catálogo;
-  // las pantallas de reservas filtran los registros por el correo del cliente o proveedor.
-  useEffect(() => {
-    localStorage.setItem('agendapro_bookings_v2', JSON.stringify(bookings));
-  }, [bookings]);
+  // --- Carga de datos según el rol autenticado ---
 
-  useEffect(() => {
-    localStorage.setItem('agendapro_services_v2', JSON.stringify(services));
-  }, [services]);
+  const cargarDatosProveedor = async (nombreProveedor: string) => {
+    try {
+      const propios = await misServicios();
+      const serviciosAdaptados = propios.map((s) => servicioPropioAServiceItem(s, nombreProveedor));
+      setServices(serviciosAdaptados);
 
-  useEffect(() => {
-    localStorage.setItem('agendapro_slots_v2', JSON.stringify(slots));
-  }, [slots]);
+      const franjasPorServicio = await Promise.all(
+        propios.map((s) => listarFranjasDeServicioPropio(s.id).catch(() => [])),
+      );
+      const franjasAdaptadas = propios.flatMap((s, indice) =>
+        franjasPorServicio[indice].map((f) => franjaASlot(f, s.nombre)),
+      );
+      franjasAdaptadas.sort((a, b) => (a.dateISO || '').localeCompare(b.dateISO || '') || (a.startTime || '').localeCompare(b.startTime || ''));
+      setSlots(franjasAdaptadas);
 
-
-  const entrarConCuenta = (usuario: AuthenticatedUser) => {
-    setCurrentUser(usuario);
-    setRole(usuario.role);
-    setSelectedServiceToBook(null);
-    setCurrentView(usuario.role === 'provider' ? 'provider-dashboard' : 'client-dashboard');
-    showToast(`Bienvenido/a, ${usuario.name}.`);
-
- };
-
-  useEffect(() => {
-    localStorage.setItem(
-      'agendapro_client_profile',
-      JSON.stringify(clientProfile)
-    );
-  }, [clientProfile]);
-
-  // Cambios de rol y login
-  const handleSwitchRole = () => {
-    if (role === 'provider') {
-      setRole('client');
-      setCurrentView('client-dashboard');
-      showToast('Cambiado a Modo Cliente VIP (Carlos Mendoza)');
-    } else {
-      setRole('provider');
-      setCurrentView('provider-dashboard');
-      showToast('Cambiado a Modo Proveedor (Laura Morales)');
+      const agenda = await miAgenda();
+      setBookings(agenda.map((r) => reservaABooking(r)));
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudieron cargar tus datos.'));
     }
   };
+
+  const cargarDatosCliente = async () => {
+    try {
+      const catalogo = await catalogoServicios();
+      setServices(catalogo.map(catalogoAServiceItem));
+
+      const agenda = await miAgenda();
+      setBookings((previas) =>
+        agenda.map((r) => {
+          const previa = previas.find((b) => b.id === String(r.id));
+          return reservaABooking(r, {
+            clientPhone: previa?.clientPhone,
+            notes: previa?.notes,
+            modality: previa?.modality,
+          });
+        }),
+      );
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudieron cargar los datos.'));
+    }
+  };
+
+  const entrarConPerfil = (perfil: UsuarioResponse) => {
+    const usuario = usuarioAAuthenticatedUser(perfil);
+    setCurrentUser(usuario);
+    setRole(usuario.role);
+    aplicarPerfil(perfil);
+    setSelectedServiceToBook(null);
+    setCurrentView(usuario.role === 'provider' ? 'provider-dashboard' : 'client-dashboard');
+    if (usuario.role === 'provider') {
+      void cargarDatosProveedor(usuario.name);
+    } else {
+      void cargarDatosCliente();
+    }
+  };
+
+  // Restaura la sesión si ya existe un token guardado de una visita anterior.
+  useEffect(() => {
+    const token = getToken();
+    if (!token) {
+      setIsRestoringSession(false);
+      return;
+    }
+    (async () => {
+      try {
+        const perfil = await getMiPerfil();
+        entrarConPerfil(perfil);
+      } catch {
+        clearToken();
+      } finally {
+        setIsRestoringSession(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogin = async (email: string, password: string) => {
     const resultado = await authenticateAccount(email, password);
-    if (resultado.success && resultado.user) {
-      entrarConCuenta(resultado.user);
+    if (resultado.success) {
+      try {
+        const perfil = await getMiPerfil();
+        entrarConPerfil(perfil);
+        showToast(`Bienvenido/a, ${perfil.nombre}.`);
+      } catch (err) {
+        return { success: false, message: mensajeDeApiError(err, 'No se pudo cargar tu perfil.') };
+      }
     }
     return resultado;
   };
 
-  const handleRegister = async (
-    name: string,
-    email: string,
-    password: string,
-    selectedRole: UserRole
-  ) => {
-    const resultado = await registerAccount(
-      name,
-      email,
-      password,
-      selectedRole
-    );
-    if (resultado.success && resultado.user) {
-      entrarConCuenta(resultado.user);
+  const handleRegister = async (name: string, email: string, password: string, selectedRole: UserRole) => {
+    const resultado = await registerAccount(name, email, password, selectedRole);
+    if (resultado.success) {
+      try {
+        const perfil = await getMiPerfil();
+        entrarConPerfil(perfil);
+        showToast(`Bienvenido/a, ${perfil.nombre}.`);
+      } catch (err) {
+        return { success: false, message: mensajeDeApiError(err, 'No se pudo cargar tu perfil.') };
+      }
     }
     return resultado;
   };
 
   const handleLogout = () => {
+    cerrarSesion();
     setCurrentUser(null);
     setSelectedServiceToBook(null);
+    setBookings([]);
+    setServices([]);
+    setSlots([]);
+    setClientBookingSlots([]);
+    setRescheduleSlots([]);
     setCurrentView('login');
-    showToast('Sesión cerrada. Tus datos guardados no se borraron.');
   };
 
-  // Acciones de reservas
-  const handleConfirmBooking = (bookingId: string) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, status: 'confirmed' } : b))
-    );
-    showToast('Reserva confirmada correctamente.');
+  // Este prototipo representa cuentas reales: cambiar de rol implica cerrar sesión
+  // y entrar con otra cuenta, tal como ya lo indicaba la interfaz ("Salir / Cambiar cuenta").
+  const handleSwitchRole = () => {
+    handleLogout();
+    showToast('Sesión cerrada. Inicia sesión con la otra cuenta.');
   };
 
+  // El backend confirma la reserva en el momento de crearla (HU14): no existe un paso
+  // de aprobación posterior por parte del proveedor.
+  const handleConfirmBooking = (_bookingId: string) => {
+    showToast('Esta reserva ya quedó confirmada al momento de solicitarse.');
+  };
+
+  // HU15 y HU16 son operaciones del cliente sobre su propia reserva; el proveedor no
+  // tiene un endpoint equivalente en el backend.
   const handleCancelBooking = (booking: Booking) => {
+    if (role !== 'client') {
+      showToast('Solo el cliente puede cancelar su propia reserva.');
+      return;
+    }
     setBookingToCancel(booking);
   };
 
-  const handleConfirmCancelModal = (bookingId: string, reason: string) => {
-    const reservaCancelada = bookings.find((booking) => booking.id === bookingId);
-    setBookings((prev) => prev.map((booking) =>
-      booking.id === bookingId ? { ...booking, status: 'cancelled', notes: reason } : booking,
-    ));
-    if (reservaCancelada?.availabilitySlotId) {
-      setSlots((prev) => prev.map((slot) => slot.id === reservaCancelada.availabilitySlotId
-        ? { ...slot, isBooked: false }
-        : slot));
+  const handleConfirmCancelModal = async (bookingId: string, _reason: string) => {
+    try {
+      const respuesta = await cancelarReserva(Number(bookingId));
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? reservaABooking(respuesta, { clientPhone: b.clientPhone, notes: b.notes, modality: b.modality }) : b)),
+      );
+      showToast('Reserva cancelada y horario liberado.');
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudo cancelar la reserva.'));
+    } finally {
+      setBookingToCancel(null);
     }
-    setBookingToCancel(null);
-    showToast('Reserva cancelada y horario liberado.');
   };
 
-  const handleNewBookingCreated = (newBooking: Booking) => {
-    const yaReservado = bookings.some((booking) => {
-      if (booking.status !== 'pending' && booking.status !== 'confirmed') return false;
-      if (newBooking.availabilitySlotId && booking.availabilitySlotId === newBooking.availabilitySlotId) return true;
-      return Boolean(newBooking.dateISO && newBooking.startTime && booking.dateISO === newBooking.dateISO
-        && booking.startTime === newBooking.startTime && booking.providerEmail === newBooking.providerEmail);
-    });
-    if (yaReservado) {
-      showToast('Ese horario acaba de ser reservado. Elige otra franja.');
+  const abrirReprogramar = async (booking: Booking) => {
+    if (role !== 'client') {
+      showToast('Solo el cliente puede reprogramar su propia reserva.');
       return;
     }
-    setBookings((prev) => [newBooking, ...prev]);
-    if (newBooking.availabilitySlotId) {
-      setSlots((prev) => prev.map((slot) => slot.id === newBooking.availabilitySlotId
-        ? { ...slot, isBooked: true }
-        : slot));
+    try {
+      const franjas = await catalogoFranjasDeServicio(Number(booking.serviceId));
+      const candidatas = franjas
+        .filter((f) => String(f.id) !== booking.availabilitySlotId)
+        .map((f) => franjaASlot(f, booking.serviceTitle));
+      setRescheduleSlots(candidatas);
+      setBookingToReschedule(booking);
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudieron cargar los horarios disponibles.'));
     }
-    setConfirmedBookingForModal(newBooking);
-    showToast('Solicitud de reserva enviada; falta la confirmación del proveedor.');
   };
 
-  const handleRescheduleBooking = (bookingId: string, newSlot: AvailabilitySlot): boolean => {
-    const reservaAnterior = bookings.find((booking) => booking.id === bookingId);
-    const franjaActual = slots.find((slot) => slot.id === newSlot.id);
-    if (!reservaAnterior || !franjaActual || franjaActual.isBooked) {
-      showToast('Ese horario ya no está disponible. Selecciona otra franja.');
+  const handleRescheduleBooking = async (bookingId: string, newSlot: AvailabilitySlot): Promise<boolean> => {
+    try {
+      const respuesta = await reprogramarReserva(Number(bookingId), Number(newSlot.id));
+      setBookings((prev) =>
+        prev.map((b) => (b.id === bookingId ? reservaABooking(respuesta, { clientPhone: b.clientPhone, notes: b.notes, modality: b.modality }) : b)),
+      );
+      showToast('Reserva reprogramada correctamente.');
+      return true;
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudo reprogramar la reserva.'));
       return false;
     }
+  };
 
-    const yaReservado = bookings.some((booking) => booking.id !== bookingId
-      && (booking.status === 'pending' || booking.status === 'confirmed')
-      && ((booking.availabilitySlotId && booking.availabilitySlotId === newSlot.id)
-        || Boolean(booking.dateISO === newSlot.dateISO && booking.startTime === newSlot.startTime
-          && booking.providerEmail === newSlot.providerEmail)));
-    if (yaReservado) {
-      showToast('Ese horario ya fue solicitado por otra reserva.');
-      return false;
+  const handleNewBookingCreated = async (newBooking: Booking) => {
+    if (!newBooking.availabilitySlotId) {
+      showToast('Selecciona un horario válido para reservar.');
+      return;
     }
-
-    const horaNueva = newSlot.startTime ? (() => {
-      const [horas, minutos] = newSlot.startTime!.split(':').map(Number);
-      return `${String(horas % 12 || 12).padStart(2, '0')}:${String(minutos).padStart(2, '0')} ${horas >= 12 ? 'PM' : 'AM'}`;
-    })() : newSlot.timeRange;
-    const fechaNueva = newSlot.fullDate || newSlot.dateISO || '';
-
-    setBookings((prev) => prev.map((booking) => booking.id === bookingId
-      ? {
-          ...booking,
-          date: fechaNueva,
-          dateISO: newSlot.dateISO,
-          time: horaNueva,
-          startTime: newSlot.startTime,
-          availabilitySlotId: newSlot.id,
-          timeSlotFormatted: `${fechaNueva} • ${newSlot.timeRange}`,
-          status: 'pending',
+    try {
+      const respuesta = await crearReserva(Number(newBooking.availabilitySlotId));
+      const reservaAdaptada = reservaABooking(respuesta, {
+        clientPhone: newBooking.clientPhone,
+        notes: newBooking.notes,
+        modality: newBooking.modality,
+      });
+      setBookings((prev) => [reservaAdaptada, ...prev]);
+      setClientBookingSlots((prev) => prev.filter((slot) => slot.id !== newBooking.availabilitySlotId));
+      setConfirmedBookingForModal(reservaAdaptada);
+      showToast('¡Reserva confirmada!');
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudo completar la reserva.'));
+      if (selectedServiceToBook) {
+        try {
+          const franjas = await catalogoFranjasDeServicio(Number(selectedServiceToBook.id));
+          setClientBookingSlots(franjas.map((f) => franjaASlot(f, selectedServiceToBook.title)));
+        } catch {
+          // Si tampoco se puede refrescar, el cliente simplemente verá la lista anterior.
         }
-      : booking));
-    setSlots((prev) => prev.map((slot) => {
-      if (slot.id === reservaAnterior.availabilitySlotId) return { ...slot, isBooked: false };
-      if (slot.id === newSlot.id) return { ...slot, isBooked: true };
-      return slot;
-    }));
-    showToast('Solicitud de reprogramación enviada al proveedor.');
-    return true;
+      }
+    }
   };
 
-  const handleAddService = (newService: ServiceItem) => {
-    const servicioConPropietario: ServiceItem = {
-      ...newService,
-      providerEmail: currentUser?.email,
-      providerName: currentUser?.name || newService.providerName,
-      providerStudio: currentUser?.name || newService.providerStudio,
-    };
-    setServices((prev) => [servicioConPropietario, ...prev]);
-    showToast(`Servicio "${servicioConPropietario.title}" publicado en el catálogo.`);
+  const handleAddService = async (payload: NuevoServicioPayload) => {
+    const nuevo = await crearServicio({
+      nombre: payload.title,
+      descripcion: payload.description,
+      duracionMin: payload.durationMinutes,
+      precio: payload.price,
+    });
+    setServices((prev) => [servicioPropioAServiceItem(nuevo, currentUser?.name || ''), ...prev]);
+    showToast(`Servicio "${nuevo.nombre}" publicado en el catálogo.`);
   };
 
-  const handleUpdateService = (updatedService: ServiceItem) => {
-    setServices((prev) => prev.map((service) => service.id === updatedService.id
-      ? { ...updatedService, providerEmail: currentUser?.email || updatedService.providerEmail, providerName: currentUser?.name || updatedService.providerName, providerStudio: currentUser?.name || updatedService.providerStudio }
-      : service));
+  const handleUpdateService = async (id: string, payload: NuevoServicioPayload) => {
+    const actualizado = await actualizarServicio(Number(id), {
+      nombre: payload.title,
+      descripcion: payload.description,
+      duracionMin: payload.durationMinutes,
+      precio: payload.price,
+    });
+    setServices((prev) => prev.map((s) => (s.id === id ? servicioPropioAServiceItem(actualizado, currentUser?.name || '') : s)));
     setEditingService(null);
-    showToast(`Servicio "${updatedService.title}" actualizado correctamente.`);
+    showToast(`Servicio "${actualizado.nombre}" actualizado correctamente.`);
   };
 
-  const handleAddSlots = (newSlots: AvailabilitySlot[]) => {
-    const slotsConPropietario = newSlots.map((slot) => ({ ...slot, providerEmail: currentUser?.email }));
-    const slotsNuevos = slotsConPropietario.filter((slot) => !slots.some((existente) =>
-      existente.providerEmail === slot.providerEmail
-      && existente.dateISO === slot.dateISO
-      && existente.startTime === slot.startTime,
-    ));
-    if (slotsNuevos.length === 0) {
-      showToast('No se añadieron horarios: esas franjas ya existen.');
-      return;
+  const handleToggleServiceActive = async (serviceId: string) => {
+    const servicio = services.find((s) => s.id === serviceId);
+    if (!servicio) return;
+    try {
+      const actualizado = await actualizarServicio(Number(serviceId), {
+        nombre: servicio.title,
+        descripcion: servicio.description || '',
+        duracionMin: servicio.durationMinutes,
+        precio: servicio.price,
+        estado: servicio.isActive ? 'INACTIVO' : 'ACTIVO',
+      });
+      setServices((prev) => prev.map((s) => (s.id === serviceId ? servicioPropioAServiceItem(actualizado, currentUser?.name || '') : s)));
+      showToast('Estado del servicio actualizado.');
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudo actualizar el servicio.'));
     }
-    setSlots((prev) => [...slotsNuevos, ...prev]);
-    showToast(`Se publicaron ${slotsNuevos.length} franja(s) horaria(s).`);
   };
 
-  const handleDeleteSlot = (slotId: string) => {
-    const reservaActiva = bookings.some((booking) => booking.availabilitySlotId === slotId
-      && (booking.status === 'pending' || booking.status === 'confirmed'));
-    if (reservaActiva) {
-      showToast('No puedes eliminar un horario que tiene una reserva activa. Cancela la reserva primero.');
-      return;
+  const handleDeleteService = async (serviceId: string) => {
+    const servicio = services.find((s) => s.id === serviceId);
+    try {
+      await eliminarServicio(Number(serviceId));
+      setServices((prev) => prev.filter((s) => s.id !== serviceId));
+      showToast(`Servicio "${servicio?.title}" eliminado del catálogo.`);
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudo eliminar el servicio.'));
     }
-    setSlots((prev) => prev.filter((slot) => slot.id !== slotId));
-    showToast('Franja horaria eliminada.');
   };
 
-  const handleToggleServiceActive = (serviceId: string) => {
-    setServices((prev) =>
-      prev.map((s) => (s.id === serviceId ? { ...s, isActive: !s.isActive } : s))
-    );
-    showToast('Estado del servicio actualizado.');
+  const handleCreateSlots = async (payload: NuevaFranjaPayload) => {
+    const servicioIdNumero = Number(payload.servicioId);
+    const servicio = services.find((s) => s.id === payload.servicioId);
+    const serviceTag = servicio?.title || '';
+
+    let nuevasFranjas;
+    if (payload.repetirSemanalmente) {
+      nuevasFranjas = await publicarFranjaRecurrente(servicioIdNumero, {
+        horaInicio: payload.horaInicio,
+        horaFin: payload.horaFin,
+        diasSemana: payload.diasSemana.map((d) => DIAS_JAVA[d]),
+        repetirHasta: payload.repetirHasta,
+        cupoTotal: payload.cupoTotal,
+      });
+    } else {
+      const inicioISO = `${payload.fechaInicio}T${payload.horaInicio}:00-05:00`;
+      const finISO = `${payload.fechaInicio}T${payload.horaFin}:00-05:00`;
+      nuevasFranjas = [await publicarFranja(servicioIdNumero, inicioISO, finISO, payload.cupoTotal)];
+    }
+
+    const adaptadas = nuevasFranjas.map((f) => franjaASlot(f, serviceTag));
+    setSlots((prev) => [...adaptadas, ...prev]);
+    showToast(`Se publicaron ${adaptadas.length} franja(s) horaria(s).`);
   };
 
-  const handleDeleteService = (serviceId: string) => {
-    const service = services.find((s) => s.id === serviceId);
-    setServices((prev) => prev.filter((s) => s.id !== serviceId));
-    showToast(`Servicio "${service?.title}" eliminado del catálogo.`);
+  const handleDeleteSlot = async (slotId: string) => {
+    try {
+      await retirarFranja(Number(slotId));
+      setSlots((prev) => prev.filter((s) => s.id !== slotId));
+      showToast('Horario retirado correctamente.');
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudo retirar el horario.'));
+    }
   };
 
-// Cada rol ve sus propias reservas. Los servicios y horarios publicados son compartidos en el catálogo.
-  const reservasProveedor = currentUser
-    ? bookings.filter((booking) => booking.providerEmail === currentUser.email)
-    : [];
-  const reservasCliente = currentUser
-    ? bookings.filter(
-        (booking) =>
-          booking.clientEmail.trim().toLowerCase() ===
-          currentUser.email.toLowerCase()
-      )
-    : [];
-  const serviciosProveedor = currentUser
-    ? services.filter((service) => service.providerEmail === currentUser.email)
-    : [];
-  const franjasProveedor = currentUser
-    ? slots.filter((slot) => slot.providerEmail === currentUser.email)
-    : [];
-  const serviciosPublicos = services.filter((service) => service.isActive);
-
-  const handleSaveClientProfile = (updatedProfile: ClientProfileData) => {
-    setClientProfile(updatedProfile);
-    showToast('Perfil actualizado correctamente.');
+  const handleSelectServiceToBook = async (service: ServiceItem) => {
+    setSelectedServiceToBook(service);
+    setCurrentView('client-booking');
+    try {
+      const franjas = await catalogoFranjasDeServicio(Number(service.id));
+      setClientBookingSlots(franjas.map((f) => franjaASlot(f, service.title)));
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudieron cargar los horarios de este servicio.'));
+      setClientBookingSlots([]);
+    }
   };
 
-  // Contadores
-  const pendingBookingsCount = reservasProveedor.filter(
-    (booking) => booking.status === 'pending'
-  ).length;
+  const handleSaveClientProfile = async (updatedProfile: ClientProfileData) => {
+    try {
+      const actualizado = await actualizarPerfil(updatedProfile.name, updatedProfile.email, updatedProfile.phone);
+      aplicarPerfil(actualizado);
+      setCurrentUser((prev) => (prev ? { ...prev, name: actualizado.nombre, email: actualizado.correo } : prev));
+      showToast('Perfil actualizado correctamente.');
+    } catch (err) {
+      showToast(mensajeDeApiError(err, 'No se pudo actualizar el perfil.'));
+    }
+  };
 
+  const reservasProveedor = role === 'provider' ? bookings : [];
+  const reservasCliente = role === 'client' ? bookings : [];
+  const serviciosProveedor = role === 'provider' ? services : [];
+  const franjasProveedor = role === 'provider' ? slots : [];
+  const serviciosPublicos = role === 'client' ? services : [];
+  const calendarEvents = construirEventosAgenda(reservasProveedor);
+
+  const pendingBookingsCount = reservasProveedor.filter((booking) => booking.status === 'pending').length;
   const activeClientBookingsCount = reservasCliente.filter(
-    (booking) => booking.status === 'confirmed' || booking.status === 'pending'
+    (booking) => booking.status === 'confirmed' || booking.status === 'pending',
   ).length;
+
+  if (isRestoringSession) {
+    return (
+      <div className="min-h-screen bg-[#f8faff] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-blue-700 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8faff] text-[#0b1c30] flex flex-col selection:bg-blue-100 selection:text-blue-900 font-sans">
-      {/* Notificación flotante (Toast) */}
       {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-[#0b1c30] text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700 animate-in slide-in-from-bottom-3 text-xs font-semibold">
+        <div className="fixed bottom-5 right-5 z-50 bg-[#0b1c30] text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 border border-slate-700 animate-in slide-in-from-bottom-3 text-xs font-semibold max-w-sm">
           <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Enrutador de pantallas */}
       {currentView === 'login' || !currentUser ? (
         <LoginScreen onLogin={handleLogin} onRegister={handleRegister} />
       ) : (
         <div className="flex flex-1 min-h-screen">
-          {/* Barra lateral */}
           <Sidebar
             role={role}
             currentView={currentView}
@@ -398,7 +503,6 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
             currentUserEmail={currentUser.email}
           />
 
-          {/* Área de contenido principal */}
           <div className="flex-1 flex flex-col min-w-0">
             <Header
               role={role}
@@ -413,7 +517,6 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
             />
 
             <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
-              {/* Vistas Proveedor */}
               {currentView === 'provider-dashboard' && (
                 <ProviderDashboard
                   bookings={reservasProveedor}
@@ -435,7 +538,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                   bookings={reservasProveedor}
                   onConfirmBooking={handleConfirmBooking}
                   onCancelBooking={handleCancelBooking}
-                  onRescheduleBooking={(booking) => setBookingToReschedule(booking)}
+                  onRescheduleBooking={abrirReprogramar}
                   onNavigate={(view) => setCurrentView(view)}
                 />
               )}
@@ -475,17 +578,13 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                 />
               )}
 
-              {/* Vistas Cliente */}
               {currentView === 'client-dashboard' && (
                 <ClientDashboard
                   bookings={reservasCliente}
                   services={serviciosPublicos}
                   clientName={currentUser.name}
                   onNavigate={(view) => setCurrentView(view)}
-                  onSelectServiceToBook={(srv) => {
-                    setSelectedServiceToBook(srv);
-                    setCurrentView('client-booking');
-                  }}
+                  onSelectServiceToBook={handleSelectServiceToBook}
                   onCancelBooking={handleCancelBooking}
                 />
               )}
@@ -494,10 +593,7 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                 <ClientExplore
                   services={serviciosPublicos}
                   onNavigate={(view) => setCurrentView(view)}
-                  onSelectServiceToBook={(srv) => {
-                    setSelectedServiceToBook(srv);
-                    setCurrentView('client-booking');
-                  }}
+                  onSelectServiceToBook={handleSelectServiceToBook}
                 />
               )}
 
@@ -505,8 +601,8 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                 selectedServiceToBook ? (
                   <ClientBooking
                     service={selectedServiceToBook}
-                    slots={slots}
-                    bookings={bookings}
+                    slots={clientBookingSlots}
+                    bookings={reservasCliente}
                     clientName={currentUser.name}
                     clientEmail={currentUser.email}
                     onNavigate={(view) => setCurrentView(view)}
@@ -526,28 +622,23 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
                   bookings={reservasCliente}
                   onNavigate={(view) => setCurrentView(view)}
                   onCancelBooking={handleCancelBooking}
-                  onRescheduleBooking={(booking) => setBookingToReschedule(booking)}
+                  onRescheduleBooking={abrirReprogramar}
                 />
               )}
 
-              {currentView === 'client-profile' && role === 'client' && (
-                <ClientProfile
-                  profile={clientProfile}
-                  onSave={handleSaveClientProfile}
-                />
+              {currentView === 'client-profile' && (
+                <ClientProfile profile={clientProfile} onSave={handleSaveClientProfile} />
               )}
             </main>
           </div>
         </div>
       )}
 
-      {/* Modales */}
       <BookingConfirmationModal
         booking={confirmedBookingForModal}
         onClose={() => setConfirmedBookingForModal(null)}
         onGoToReservations={() => {
           setConfirmedBookingForModal(null);
-          setRole('client');
           setCurrentView('client-reservations');
         }}
       />
@@ -560,8 +651,8 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
       <RescheduleBookingModal
         booking={bookingToReschedule}
-        slots={slots}
-        bookings={bookings}
+        slots={rescheduleSlots}
+        bookings={reservasCliente}
         onClose={() => setBookingToReschedule(null)}
         onConfirmReschedule={handleRescheduleBooking}
       />
@@ -580,16 +671,14 @@ const [isShareModalOpen, setIsShareModalOpen] = useState(false);
       <NewSlotModal
         isOpen={isNewSlotOpen}
         onClose={() => setIsNewSlotOpen(false)}
-        onAddSlots={handleAddSlots}
+        services={serviciosProveedor.filter((s) => s.isActive)}
+        onCreate={handleCreateSlots}
       />
 
       <SharePublicLinkModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        onOpenClientView={() => {
-          setRole('client');
-          setCurrentView(selectedServiceToBook ? 'client-booking' : 'client-explore');
-        }}
+        onOpenClientView={() => setCurrentView(selectedServiceToBook ? 'client-booking' : 'client-explore')}
       />
     </div>
   );

@@ -7,7 +7,7 @@ interface RescheduleBookingModalProps {
   slots: AvailabilitySlot[];
   bookings: Booking[];
   onClose: () => void;
-  onConfirmReschedule: (bookingId: string, newSlot: AvailabilitySlot) => boolean;
+  onConfirmReschedule: (bookingId: string, newSlot: AvailabilitySlot) => Promise<boolean>;
 }
 
 function fechaLocalISO(fecha = new Date()): string {
@@ -63,6 +63,7 @@ export const RescheduleBookingModal: React.FC<RescheduleBookingModalProps> = ({
 }) => {
   const [selectedSlotId, setSelectedSlotId] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     setSelectedSlotId('');
@@ -83,16 +84,23 @@ export const RescheduleBookingModal: React.FC<RescheduleBookingModalProps> = ({
 
   if (!booking) return null;
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nuevaFranja = horariosDisponibles.find((franja) => franja.id === selectedSlotId);
     if (!nuevaFranja) {
       setErrorMessage('Selecciona una franja disponible para reprogramar la cita.');
       return;
     }
-    const resultado = onConfirmReschedule(booking.id, nuevaFranja);
-    if (resultado) onClose();
-    else setErrorMessage('Ese horario acaba de ocuparse. Selecciona otra franja.');
+    setIsSubmitting(true);
+    try {
+      const resultado = await onConfirmReschedule(booking.id, nuevaFranja);
+      if (resultado) onClose();
+      else setErrorMessage('Ese horario acaba de ocuparse. Selecciona otra franja.');
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'No se pudo reprogramar la reserva.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -143,9 +151,9 @@ export const RescheduleBookingModal: React.FC<RescheduleBookingModalProps> = ({
 
           <div className="pt-2 flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold">Cancelar</button>
-            <button type="submit" disabled={!selectedSlotId} className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-xs transition-all flex items-center gap-1.5">
+            <button type="submit" disabled={!selectedSlotId || isSubmitting} className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-bold shadow-xs transition-all flex items-center gap-1.5">
               <Save className="w-4 h-4" />
-              <span>Enviar solicitud</span>
+              <span>{isSubmitting ? 'Enviando…' : 'Confirmar nuevo horario'}</span>
             </button>
           </div>
         </form>

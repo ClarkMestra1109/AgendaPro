@@ -1,11 +1,23 @@
-import React, { useState } from 'react';
-import { AvailabilitySlot } from '../../types';
+import React, { useEffect, useState } from 'react';
+import { ServiceItem } from '../../types';
 import { X, Clock, Plus, CalendarDays, Repeat2 } from 'lucide-react';
+
+export interface NuevaFranjaPayload {
+  servicioId: string;
+  fechaInicio: string; // YYYY-MM-DD
+  horaInicio: string; // HH:mm
+  horaFin: string; // HH:mm
+  cupoTotal: number;
+  repetirSemanalmente: boolean;
+  diasSemana: number[]; // 0 (domingo) .. 6 (sábado)
+  repetirHasta: string; // YYYY-MM-DD, solo si repetirSemanalmente
+}
 
 interface NewSlotModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddSlots: (slots: AvailabilitySlot[]) => void;
+  services: ServiceItem[];
+  onCreate: (payload: NuevaFranjaPayload) => Promise<void>;
 }
 
 const DIAS = [
@@ -25,48 +37,35 @@ function fechaLocalISO(fecha = new Date()): string {
   return `${anio}-${mes}-${dia}`;
 }
 
-function fechaDesdeISO(valor: string): Date {
-  const [anio, mes, dia] = valor.split('-').map(Number);
-  return new Date(anio, mes - 1, dia);
-}
-
 function minutosDesdeHora(hora: string): number {
   const [horas, minutos] = hora.split(':').map(Number);
   return horas * 60 + minutos;
 }
 
-function horaDesdeMinutos(minutosTotales: number): string {
-  const horas = Math.floor(minutosTotales / 60);
-  const minutos = minutosTotales % 60;
-  return `${String(horas).padStart(2, '0')}:${String(minutos).padStart(2, '0')}`;
+function sumarDias(fechaISO: string, dias: number): string {
+  const [anio, mes, dia] = fechaISO.split('-').map(Number);
+  const fecha = new Date(anio, mes - 1, dia + dias);
+  return fechaLocalISO(fecha);
 }
 
-function horaAmPm(hora: string): string {
-  const [horas, minutos] = hora.split(':').map(Number);
-  const sufijo = horas >= 12 ? 'PM' : 'AM';
-  const horas12 = horas % 12 || 12;
-  return `${String(horas12).padStart(2, '0')}:${String(minutos).padStart(2, '0')} ${sufijo}`;
-}
-
-function fechaLegible(fecha: Date): string {
-  return fecha.toLocaleDateString('es-CO', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-export const NewSlotModal: React.FC<NewSlotModalProps> = ({ isOpen, onClose, onAddSlots }) => {
+export const NewSlotModal: React.FC<NewSlotModalProps> = ({ isOpen, onClose, services, onCreate }) => {
   const hoy = fechaLocalISO();
+  const [servicioId, setServicioId] = useState('');
   const [fechaInicio, setFechaInicio] = useState(hoy);
   const [horaInicio, setHoraInicio] = useState('');
   const [horaFin, setHoraFin] = useState('');
-  const [intervalo, setIntervalo] = useState('60');
+  const [cupoTotal, setCupoTotal] = useState('1');
   const [repetirSemanalmente, setRepetirSemanalmente] = useState(false);
   const [diasSeleccionados, setDiasSeleccionados] = useState<number[]>([new Date().getDay()]);
-  const [servicioAdmitido, setServicioAdmitido] = useState('Cualquier servicio');
+  const [repetirHasta, setRepetirHasta] = useState(sumarDias(hoy, 28));
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && !servicioId && services.length > 0) {
+      setServicioId(services[0].id);
+    }
+  }, [isOpen, services, servicioId]);
 
   if (!isOpen) return null;
 
@@ -80,17 +79,21 @@ export const NewSlotModal: React.FC<NewSlotModalProps> = ({ isOpen, onClose, onA
     setFechaInicio(fechaLocalISO());
     setHoraInicio('');
     setHoraFin('');
-    setIntervalo('60');
+    setCupoTotal('1');
     setRepetirSemanalmente(false);
     setDiasSeleccionados([new Date().getDay()]);
-    setServicioAdmitido('Cualquier servicio');
+    setRepetirHasta(sumarDias(fechaLocalISO(), 28));
     setError('');
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError('');
 
+    if (!servicioId) {
+      setError('Selecciona el servicio al que aplicará este horario.');
+      return;
+    }
     const hoyActual = fechaLocalISO();
     if (fechaInicio < hoyActual) {
       setError('La fecha inicial no puede estar en el pasado.');
@@ -100,62 +103,41 @@ export const NewSlotModal: React.FC<NewSlotModalProps> = ({ isOpen, onClose, onA
       setError('La hora de finalización debe ser posterior a la hora de inicio.');
       return;
     }
-    if (repetirSemanalmente && diasSeleccionados.length === 0) {
-      setError('Selecciona al menos un día para repetir el horario.');
-      return;
-    }
-
-    const duracion = Number(intervalo);
-    const inicioMinutos = minutosDesdeHora(horaInicio);
-    const finMinutos = minutosDesdeHora(horaFin);
-    const ahora = new Date();
-    const minutoActual = ahora.getHours() * 60 + ahora.getMinutes();
-    if (!repetirSemanalmente && fechaInicio === hoyActual && inicioMinutos <= minutoActual) {
-      setError('La hora de inicio no puede estar en el pasado.');
-      return;
-    }
-    const primeraFecha = fechaDesdeISO(fechaInicio);
-    const diasDeGeneracion = repetirSemanalmente ? 28 : 1;
-    const franjasGeneradas: AvailabilitySlot[] = [];
-
-    for (let desplazamiento = 0; desplazamiento < diasDeGeneracion; desplazamiento += 1) {
-      const fecha = new Date(primeraFecha);
-      fecha.setDate(primeraFecha.getDate() + desplazamiento);
-
-      if (repetirSemanalmente && !diasSeleccionados.includes(fecha.getDay())) continue;
-
-      const fechaISO = fechaLocalISO(fecha);
-      for (let minuto = inicioMinutos; minuto + duracion <= finMinutos; minuto += duracion) {
-        // Si la repetición comienza hoy, no publiques franjas cuya hora ya pasó.
-        if (fechaISO === hoyActual && minuto <= minutoActual) continue;
-        const inicio = horaDesdeMinutos(minuto);
-        const fin = horaDesdeMinutos(minuto + duracion);
-        const indice = franjasGeneradas.length;
-
-        franjasGeneradas.push({
-          id: `slot-${fechaISO}-${inicio.replace(':', '')}-${Date.now()}-${indice}`,
-          dayLabel: fecha.toLocaleDateString('es-CO', { weekday: 'short' }).replace('.', ''),
-          fullDate: fechaLegible(fecha),
-          dateISO: fechaISO,
-          startTime: inicio,
-          endTime: fin,
-          durationMinutes: duracion,
-          timeRange: `${horaAmPm(inicio)} - ${horaAmPm(fin)}`,
-          capacityText: '1 cupo libre',
-          serviceTag: servicioAdmitido.trim() || 'Cualquier servicio',
-          isBooked: false,
-        });
+    if (repetirSemanalmente) {
+      if (diasSeleccionados.length === 0) {
+        setError('Selecciona al menos un día para repetir el horario.');
+        return;
+      }
+      if (!repetirHasta || repetirHasta <= hoyActual) {
+        setError('La fecha límite de repetición debe ser posterior a hoy.');
+        return;
       }
     }
-
-    if (franjasGeneradas.length === 0) {
-      setError('No se generaron franjas. Revisa el intervalo, las horas y los días seleccionados.');
+    const cupo = Number(cupoTotal);
+    if (!(cupo >= 1 && cupo <= 100)) {
+      setError('El cupo debe ser un número entre 1 y 100.');
       return;
     }
 
-    onAddSlots(franjasGeneradas);
-    limpiarFormulario();
-    onClose();
+    setIsSubmitting(true);
+    try {
+      await onCreate({
+        servicioId,
+        fechaInicio,
+        horaInicio,
+        horaFin,
+        cupoTotal: cupo,
+        repetirSemanalmente,
+        diasSemana: diasSeleccionados,
+        repetirHasta,
+      });
+      limpiarFormulario();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo publicar el horario.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -175,78 +157,84 @@ export const NewSlotModal: React.FC<NewSlotModalProps> = ({ isOpen, onClose, onA
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-          <div>
-            <label htmlFor="slot-start-date" className="block font-bold text-slate-700 mb-1.5">Fecha inicial</label>
-            <div className="relative">
-              <CalendarDays className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input id="slot-start-date" type="date" required min={hoy} value={fechaInicio} onChange={(event) => setFechaInicio(event.target.value)} className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {services.length === 0 ? (
+          <p className="text-xs text-slate-500">Primero debes publicar al menos un servicio para poder abrir horarios.</p>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             <div>
-              <label htmlFor="slot-start-time" className="block font-bold text-slate-700 mb-1.5">Hora de inicio</label>
-              <input id="slot-start-time" type="time" required value={horaInicio} onChange={(event) => setHoraInicio(event.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
+              <label htmlFor="slot-service" className="block font-bold text-slate-700 mb-1.5">Servicio</label>
+              <select id="slot-service" required value={servicioId} onChange={(event) => setServicioId(event.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600">
+                {services.map((srv) => (
+                  <option key={srv.id} value={srv.id}>{srv.title}</option>
+                ))}
+              </select>
             </div>
+
             <div>
-              <label htmlFor="slot-end-time" className="block font-bold text-slate-700 mb-1.5">Hora de finalización</label>
-              <input id="slot-end-time" type="time" required value={horaFin} onChange={(event) => setHoraFin(event.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="slot-interval" className="block font-bold text-slate-700 mb-1.5">Duración de cada cita</label>
-            <select id="slot-interval" value={intervalo} onChange={(event) => setIntervalo(event.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600">
-              <option value="15">15 minutos</option>
-              <option value="30">30 minutos</option>
-              <option value="45">45 minutos</option>
-              <option value="60">60 minutos</option>
-              <option value="90">90 minutos</option>
-              <option value="120">120 minutos</option>
-            </select>
-          </div>
-
-          <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
-            <label className="flex items-start gap-2.5 cursor-pointer">
-              <input type="checkbox" checked={repetirSemanalmente} onChange={(event) => setRepetirSemanalmente(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-600" />
-              <span>
-                <span className="block font-bold text-slate-900">Repetir semanalmente</span>
-                <span className="block text-slate-600 mt-0.5">Genera las franjas seleccionadas durante 4 semanas, contando desde la fecha inicial.</span>
-              </span>
-            </label>
-
-            {repetirSemanalmente && (
-              <div>
-                <span className="block font-bold text-slate-700 mb-2">Días en los que se repetirá</span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {DIAS.map((dia) => (
-                    <label key={dia.value} className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer ${diasSeleccionados.includes(dia.value) ? 'border-blue-600 bg-white text-blue-800' : 'border-slate-200 bg-white text-slate-600'}`}>
-                      <input type="checkbox" checked={diasSeleccionados.includes(dia.value)} onChange={() => alternarDia(dia.value)} className="h-3.5 w-3.5 rounded border-slate-300 text-blue-700 focus:ring-blue-600" />
-                      <span>{dia.label}</span>
-                    </label>
-                  ))}
-                </div>
+              <label htmlFor="slot-start-date" className="block font-bold text-slate-700 mb-1.5">Fecha inicial</label>
+              <div className="relative">
+                <CalendarDays className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input id="slot-start-date" type="date" required min={hoy} value={fechaInicio} onChange={(event) => setFechaInicio(event.target.value)} className="w-full pl-10 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
               </div>
-            )}
-          </div>
+            </div>
 
-          <div>
-            <label htmlFor="slot-service" className="block font-bold text-slate-700 mb-1.5">Servicio admitido</label>
-            <input id="slot-service" type="text" value={servicioAdmitido} onChange={(event) => setServicioAdmitido(event.target.value)} placeholder="Cualquier servicio o nombre del servicio" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
-            <p className="text-[10px] text-slate-500 mt-1">Usa «Cualquier servicio» para ofrecer la franja a todos tus servicios.</p>
-          </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="slot-start-time" className="block font-bold text-slate-700 mb-1.5">Hora de inicio</label>
+                <input id="slot-start-time" type="time" required value={horaInicio} onChange={(event) => setHoraInicio(event.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
+              </div>
+              <div>
+                <label htmlFor="slot-end-time" className="block font-bold text-slate-700 mb-1.5">Hora de finalización</label>
+                <input id="slot-end-time" type="time" required value={horaFin} onChange={(event) => setHoraFin(event.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
+              </div>
+            </div>
 
-          {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-700">{error}</div>}
+            <div>
+              <label htmlFor="slot-cupo" className="block font-bold text-slate-700 mb-1.5">Cupo (personas que pueden reservar esta franja)</label>
+              <input id="slot-cupo" type="number" min={1} max={100} required value={cupoTotal} onChange={(event) => setCupoTotal(event.target.value)} className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-600" />
+            </div>
 
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button type="button" onClick={() => { limpiarFormulario(); onClose(); }} className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold">Cancelar</button>
-            <button type="submit" className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold shadow-xs transition-all flex items-center gap-1.5">
-              <Plus className="w-4 h-4" />
-              <span>{repetirSemanalmente ? 'Generar horarios' : 'Publicar horario'}</span>
-            </button>
-          </div>
-        </form>
+            <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 space-y-3">
+              <label className="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" checked={repetirSemanalmente} onChange={(event) => setRepetirSemanalmente(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-700 focus:ring-blue-600" />
+                <span>
+                  <span className="block font-bold text-slate-900">Repetir semanalmente</span>
+                  <span className="block text-slate-600 mt-0.5">Genera esta franja en los días que elijas, cada semana, hasta la fecha límite.</span>
+                </span>
+              </label>
+
+              {repetirSemanalmente && (
+                <>
+                  <div>
+                    <span className="block font-bold text-slate-700 mb-2">Días en los que se repetirá</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {DIAS.map((dia) => (
+                        <label key={dia.value} className={`flex items-center gap-2 rounded-xl border px-2.5 py-2 cursor-pointer ${diasSeleccionados.includes(dia.value) ? 'border-blue-600 bg-white text-blue-800' : 'border-slate-200 bg-white text-slate-600'}`}>
+                          <input type="checkbox" checked={diasSeleccionados.includes(dia.value)} onChange={() => alternarDia(dia.value)} className="h-3.5 w-3.5 rounded border-slate-300 text-blue-700 focus:ring-blue-600" />
+                          <span>{dia.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="slot-repeat-until" className="block font-bold text-slate-700 mb-1.5">Repetir hasta</label>
+                    <input id="slot-repeat-until" type="date" required min={sumarDias(hoy, 1)} value={repetirHasta} onChange={(event) => setRepetirHasta(event.target.value)} className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600" />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-700">{error}</div>}
+
+            <div className="pt-2 flex items-center justify-end gap-2">
+              <button type="button" onClick={() => { limpiarFormulario(); onClose(); }} className="px-4 py-2.5 text-slate-600 hover:bg-slate-100 rounded-xl transition-colors font-bold">Cancelar</button>
+              <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-60 text-white rounded-xl font-bold shadow-xs transition-all flex items-center gap-1.5">
+                <Plus className="w-4 h-4" />
+                <span>{isSubmitting ? 'Publicando…' : repetirSemanalmente ? 'Generar horarios' : 'Publicar horario'}</span>
+              </button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
